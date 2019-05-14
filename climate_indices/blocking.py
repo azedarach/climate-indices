@@ -8,6 +8,11 @@ DEFAULT_LAT_FIELD = 'lat'
 DEFAULT_LON_FIELD = 'lon'
 DEFAULT_HGT_FIELD = 'hgt'
 
+REFERENCE_WEIGHTS = [0.5, 0.5, -0.5, -1, -0.5, 0.5, 0.5]
+REFERENCE_LATS = [-25.0, -30.0, -40.0, -45.0, -50.0, -55.0, -60.0]
+
+BOM_BLOCKING_INDEX_FIELD_NAME = 'WBBI'
+
 NH_PHI_N = 80.0
 NH_PHI_0 = 60.0
 NH_PHI_S = 40.0
@@ -15,6 +20,17 @@ NH_PHI_S = 40.0
 SH_PHI_N = -35.0
 SH_PHI_0 = -50.0
 SH_PHI_S = -65.0
+
+
+def _to_datetime(t):
+    years = t.year
+    months = t.month
+    days = t.day
+
+    n_samples = years.shape[0]
+
+    return np.array([datetime.datetime(years[i], months[i], days[i])
+                     for i in range(n_samples)])
 
 
 def calc_tibaldi(ds, time_field=DEFAULT_TIME_FIELD,
@@ -84,17 +100,6 @@ def calc_tibaldi(ds, time_field=DEFAULT_TIME_FIELD,
     return xr.Dataset(var_data, coords=coords)
 
 
-def _to_datetime(t):
-    years = t.year
-    months = t.month
-    days = t.day
-
-    n_samples = years.shape[0]
-
-    return np.array([datetime.datetime(years[i], months[i], days[i])
-                     for i in range(n_samples)])
-
-
 def tibaldi_index_1d(tibaldi_ds, time_field=DEFAULT_TIME_FIELD,
                      lon_field=DEFAULT_LON_FIELD,
                      clim_start_year=None, clim_end_year=None,
@@ -124,3 +129,44 @@ def tibaldi_index_1d(tibaldi_ds, time_field=DEFAULT_TIME_FIELD,
     index = anom_ds[index_field].mean(lon_field).values
 
     return times, index
+
+
+def calc_bom_blocking(da, time_field=DEFAULT_TIME_FIELD,
+                      lat_field=DEFAULT_LAT_FIELD,
+                      window_length=0,
+                      method='nearest'):
+    """Calculate Wright BOM blocking index from zonal wind data.
+
+    Parameters
+    ----------
+    da : DataArray
+        DataArray containing u-wind data to compute index with.
+
+    Returns
+    -------
+    idx_vals : DataArray
+        DataArray containing BOM blocking index values
+    """
+    if window_length == 0:
+        input_da = da
+    else:
+        input_da = da.rolling(
+            {time_field: window_length}).mean().dropna(time_field)
+
+    idx_vals = input_da.coords.to_dataset().drop(lat_field)
+
+    idx_vals[BOM_BLOCKING_INDEX_FIELD_NAME] = \
+        REFERENCE_WEIGHTS[0] * input_da.sel(
+            {lat_field: REFERENCE_LATS[0]}, method=method)
+
+    n_ref_lats = len(REFERENCE_LATS)
+    for i in range(1, n_ref_lats):
+        idx_vals[BOM_BLOCKING_INDEX_FIELD_NAME] += \
+            REFERENCE_WEIGHTS[i] * input_da.sel(
+                {lat_field: REFERENCE_LATS[i]}, method=method)
+
+    return idx_vals
+
+
+__all__ = ['BOM_BLOCKING_INDEX_FIELD_NAME',
+           'calc_bom_blocking', 'calc_tibaldi', 'tibaldi_index_1d']
