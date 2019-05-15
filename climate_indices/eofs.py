@@ -45,11 +45,27 @@ def _to_nd_array(X, target_shape):
     return np.reshape(X, (n_samples,) + target_shape)
 
 
+def _check_constant_missing_values(X):
+    nan_mask = np.isnan(X)
+    if not (nan_mask.any(axis=0) == nan_mask.all(axis=0)).all():
+        raise ValueError(
+            'array has missing values in variable locations')
+
+
 def _calc_eofs_2d(X, n_eofs=None, random_state=None):
+    n_features = X.shape[1]
+
+    _check_constant_missing_values(X)
+
+    nonnan_idx = np.where(np.logical_not(np.isnan(X[0])))[0]
+    valid_data = X[:, nonnan_idx]
+
     pca = PCA(n_components=n_eofs, random_state=random_state, copy=True)
 
-    pcs = pca.fit_transform(X)
-    eofs_2d = pca.components_
+    pcs = pca.fit_transform(valid_data)
+
+    eofs_2d = np.full((n_eofs, n_features), np.NaN, dtype=X.dtype)
+    eofs_2d[:, nonnan_idx] = pca.components_
     ev = pca.explained_variance_
     evr = pca.explained_variance_ratio_
     sv = pca.singular_values_
@@ -111,7 +127,10 @@ def calc_eofs(X, n_eofs=None, weights=None, random_state=None):
     original_shape = X.shape[1:]
 
     if weights is not None:
-        _check_array_shape(weights, original_shape, 'calc_eofs')
+        if weights.ndim != X.ndim:
+            _check_array_shape(weights, original_shape, 'calc_eofs')
+        else:
+            _check_array_shape(weights, X.shape, 'calc_eofs')
         data = weights * X
     else:
         data = X
