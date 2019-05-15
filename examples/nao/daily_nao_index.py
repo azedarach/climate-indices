@@ -64,7 +64,7 @@ def plot_seasonal_eofs(seasonal_eofs, mode=0,
         plt.show()
 
 
-def _get_time_masks(x_times, y_times):
+def get_time_masks(x_times, y_times):
     all_times = np.unique(np.concatenate([x_times, y_times]))
     x_mask = np.zeros(x_times.shape, dtype=bool)
     y_mask = np.zeros(y_times.shape, dtype=bool)
@@ -80,7 +80,7 @@ def _get_time_masks(x_times, y_times):
 
 
 def get_correlation_coeff(x_times, x_vals, y_times, y_vals):
-    x_mask, y_mask = _get_time_masks(x_times, y_times)
+    x_mask, y_mask = get_time_masks(x_times, y_times)
     x_data = x_vals[x_mask]
     y_data = y_vals[y_mask]
 
@@ -185,7 +185,7 @@ def write_index_values(index, output_file=None,
 
 def parse_cmd_line_args():
     parser = argparse.ArgumentParser(
-        description='Plot seasonal EOF identified with NAO')
+        description='Plot daily NAO index')
 
     parser.add_argument(
         'datafile', help='datafile containing geopotential heights')
@@ -261,6 +261,9 @@ def main():
         seasonal_eofs = calculate_seasonal_eof(
             ref_anom_data, season=args.season, time_field=args.time_field,
             lat_field=args.lat_field, hgt_field=args.hgt_field)
+
+        if args.eof_output_file:
+            seasonal_eofs['eofs'].to_netcdf(args.eof_output_file)
 
         if not args.no_show_plots or args.eof_plot_output_file:
             plot_seasonal_eofs(

@@ -1,15 +1,16 @@
+from __future__ import print_function
+
 import argparse
 import cartopy.crs as ccrs
+import datetime
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-import netCDF4 as nc
 import numpy as np
+import xarray as xr
 
-from cartopy.util import add_cyclic_point
-
-from climate_indices import calc_ao, calc_ao_index
-from climate_indices.anomalies import daily_anomalies
-from climate_indices.timeavg import (monthly_means, daily_means,
-                                     multiyear_daily_means)
+from climate_indices.ao import (calculate_daily_region_anomalies,
+                                calculate_monthly_region_anomalies,
+                                calculate_annual_eof, calculate_ao_pc_index)
 
 
 DEFAULT_TIME_FIELD = 'time'
@@ -17,73 +18,140 @@ DEFAULT_LAT_FIELD = 'lat'
 DEFAULT_LON_FIELD = 'lon'
 DEFAULT_HGT_FIELD = 'hgt'
 
+
 DEFAULT_START_YEAR = 1979
 DEFAULT_END_YEAR = 2000
 
 
 FIGURE_SIZE = (5, 5)
 CMAP = plt.cm.RdBu_r
+CENTRAL_LATITUDE = 90.0
+CENTRAL_LONGITUDE = -80.0
 
 
-def read_data(datafile, time=DEFAULT_TIME_FIELD, lat=DEFAULT_LAT_FIELD,
-              lon=DEFAULT_LON_FIELD, hgt=DEFAULT_HGT_FIELD):
-    time_data = None
-    lat_data = None
-    lon_data = None
-    hgt_data = None
-    with nc.Dataset(datafile, 'r') as ncin:
-        time_vals = ncin[time][:]
-        time_data = nc.num2date(time_vals, ncin[time].units,
-                                calendar=ncin[time].calendar)
-        lat_data = ncin[lat][:]
-        lon_data = ncin[lon][:]
-        hgt_data = np.squeeze(ncin[hgt][:])
+def read_cpc_data(datafile):
+    data = np.genfromtxt(datafile)
 
-    return time_data, lat_data, lon_data, hgt_data
+    year = np.asarray(data[:, 0], dtype='i8')
+    month = np.asarray(data[:, 1], dtype='i8')
+    day = np.asarray(data[:, 2], dtype='i8')
+    index = data[:, 3]
 
+    n_samples = data.shape[0]
 
-def get_base_period_mask(dt, start_year, end_year):
-    years = np.array([t.year for t in dt], dtype='i8')
-    return np.logical_and(years >= start_year, years <= end_year)
+    time = np.array([datetime.datetime(year[i], month[i], day[i])
+                     for i in range(n_samples)])
+
+    return time, index
 
 
-def plot_pattern(lat, lon, ao_pattern, output_file=None, n_contours=12):
-    cyclic_lon = np.full(np.size(lon) + 1, 360.)
-    cyclic_lon[:-1] = lon
-    cyclic_data = add_cyclic_point(ao_pattern)
+def plot_eofs(eofs, mode=0, output_file=None, show_plot=True):
+    fig = plt.figure(figsize=FIGURE_SIZE)
+    proj = ccrs.Orthographic(central_latitude=CENTRAL_LATITUDE,
+                             central_longitude=CENTRAL_LONGITUDE)
+    ax = fig.add_subplot(111, projection=proj)
 
-    vmin = np.min(cyclic_data)
-    vmax = np.max(cyclic_data)
-    clevs = np.linspace(vmin, vmax, n_contours)
-
-    lon_grid, lat_grid = np.meshgrid(cyclic_lon, lat)
-
-    plt.figure(figsize=FIGURE_SIZE)
-
-    proj = ccrs.Orthographic(central_longitude=0, central_latitude=90)
-
-    ax = plt.axes(projection=proj)
+    ax.coastlines()
     ax.set_global()
-    ax.coastlines(resolution='110m')
-    ax.gridlines(linestyle='--', alpha=0.7)
 
-    cs = ax.contourf(lon_grid, lat_grid, cyclic_data, levels=clevs, cmap=CMAP,
-                     transform=ccrs.PlateCarree())
+    eof_data = eofs[{'mode': mode}].squeeze()
+    eof_data.plot.contourf(ax=ax, transform=ccrs.PlateCarree())
 
-    plt.colorbar(cs)
+    if show_plot:
+        plt.show()
 
-    plt.show()
 
-    if output_file is not None and output_file:
-        plt.savefig(output_file, bbox_inches='tight')
+def get_time_masks(x_times, y_times):
+    all_times = np.unique(np.concatenate([x_times, y_times]))
+    x_mask = np.zeros(x_times.shape, dtype=bool)
+    y_mask = np.zeros(y_times.shape, dtype=bool)
+
+    for t in all_times:
+        if t in x_times and t in y_times:
+            x_idx = np.nonzero(x_times == t)[0][0]
+            x_mask[x_idx] = True
+            y_idx = np.nonzero(y_times == t)[0][0]
+            y_mask[y_idx] = True
+
+    return x_mask, y_mask
+
+
+def get_correlation_coeff(x_times, x_vals, y_times, y_vals):
+    x_mask, y_mask = get_time_masks(x_times, y_times)
+    x_data = x_vals[x_mask]
+    y_data = y_vals[y_mask]
+
+    data = np.vstack([x_data, y_data])
+    corr_coeff = np.corrcoef(data, rowvar=True)[0, 1]
+
+    return corr_coeff
+
+
+def plot_ao_index(index, cpc_times=None, cpc_index=None,
+                  output_file=None, show_plots=True,
+                  time_field=DEFAULT_TIME_FIELD, n_years=10):
+    years = index[time_field].dt.year.values
+    months = index[time_field].dt.month.values
+    days = index[time_field].dt.day.values
+    times = np.array(
+        [datetime.datetime(int(years[i]), int(months[i]), int(days[i]))
+         for i in range(years.shape[0])])
+    index_vals = np.squeeze(index.values)
+
+    last_year = int(np.max(years))
+    first_year = int(last_year - n_years + 1)
+    valid_years = np.arange(first_year, last_year + 1)
+    mask = np.zeros(times.shape, dtype=bool)
+    for i, t in enumerate(times):
+        mask[i] = t.year in valid_years
+
+    valid_times = times[mask]
+    valid_index = index_vals[mask]
+
+    fig = plt.figure(figsize=FIGURE_SIZE)
+
+    ax = fig.add_subplot(111)
+
+    ax.plot(valid_times, valid_index, 'b-', label='AO index')
+
+    if cpc_times is not None and cpc_index is not None:
+        corr_coeff = get_correlation_coeff(
+            times, index_vals, cpc_times, cpc_index)
+        mask = np.zeros(cpc_times.shape, dtype=bool)
+        for i, t in enumerate(cpc_times):
+            mask[i] = t.year in valid_years
+        ax.plot(
+            cpc_times[mask], cpc_index[mask], 'r--',
+            label='CPC AO index (r = {:.2f})'.format(corr_coeff))
+
+    ax.grid(ls='--', color='gray', alpha=0.7)
+
+    years = mdates.YearLocator(2)
+    months = mdates.MonthLocator()
+    yearsFmt = mdates.DateFormatter('%Y')
+
+    ax.set_xlabel('Date')
+    ax.xaxis.set_major_locator(years)
+    ax.xaxis.set_major_formatter(yearsFmt)
+    ax.xaxis.set_minor_locator(months)
+    ax.set_ylabel('Index')
+
+    ax.tick_params(axis='x', labelsize=8, labelrotation=45)
+    ax.tick_params(axis='y', labelsize=8)
+
+    ax.legend()
+
+    if output_file:
+        plt.savefig(output_file)
+
+    if show_plots:
+        plt.show()
 
     plt.close()
 
 
-def write_ao_index(time, index, output_file=None):
-    if output_file is None or not output_file:
-        return
-
+def write_index_values(index, output_file=None,
+                       time_field=DEFAULT_TIME_FIELD):
     fields = [('year', '%d'),
               ('month', '%d'),
               ('day', '%d'),
@@ -93,28 +161,31 @@ def write_ao_index(time, index, output_file=None):
     fmt = ','.join([f[1] for f in fields])
 
     n_fields = len(fields)
-    n_samples = np.size(time)
+    n_samples = index.shape[0]
 
-    data = np.empty((n_samples, n_fields))
-    years = np.array([t.year for t in time], dtype='i8')
-    months = np.array([t.month for t in time], dtype='i8')
-    days = np.array([t.day for t in time], dtype='i8')
+    data = np.empty((n_samples, n_fields), dtype=index.values.dtype)
+    data[:, 0] = index[time_field].dt.year.values
+    data[:, 1] = index[time_field].dt.month.values
+    data[:, 2] = index[time_field].dt.day.values
+    data[:, 3] = np.squeeze(index.values)
 
-    data[:, 0] = years
-    data[:, 1] = months
-    data[:, 2] = days
-    data[:, 3] = index
-
-    np.savetxt(output_file, data, header=header, fmt=fmt)
+    if output_file is None or not output_file:
+        print('# ' + header)
+        for i in range(n_samples):
+            line = '  {:d},{:d},{:d},{:14.8e}'.format(
+                int(data[i, 0]), int(data[i, 1]), int(data[i, 2]),
+                data[i, 3])
+            print(line)
+    else:
+        np.savetxt(output_file, data, header=header, fmt=fmt)
 
 
 def parse_cmd_line_args():
     parser = argparse.ArgumentParser(
-        description='Calculate AO pattern and daily index from daily data')
+        description='Plot daily AO index')
 
     parser.add_argument(
-        'datafile',
-        help='netCDF file containing 1000 hPa heights')
+        'datafile', help='datafile containing 1000 hPa geopotential heights')
     parser.add_argument(
         '--time-field', dest='time_field', default=DEFAULT_TIME_FIELD,
         help='name of variable corresponding to time in input datafile')
@@ -128,19 +199,31 @@ def parse_cmd_line_args():
         '--hgt-field', dest='hgt_field', default=DEFAULT_HGT_FIELD,
         help='name of variable corresponding to height in input datafile')
     parser.add_argument(
-        '--base-period-start-year', dest='start_year',
-        type=int, default=DEFAULT_START_YEAR,
-        help='initial year in base period used to compute pattern')
+        '--start-year', dest='start_year', type=int,
+        default=DEFAULT_START_YEAR,
+        help='start year of reference period')
     parser.add_argument(
-        '--base-period-end-year', dest='end_year',
-        type=int, default=DEFAULT_END_YEAR,
-        help='last year in base period used to compute pattern')
+        '--end-year', dest='end_year', type=int,
+        default=DEFAULT_END_YEAR,
+        help='end year of reference period')
     parser.add_argument(
         '--index-output-file', dest='index_output_file',
-        default='', help='name of file to write index data in CSV format')
+        default='', help='name of file to write index to')
     parser.add_argument(
-        '--plot-output-file', dest='plot_output_file',
-        default='', help='name of file to write pattern plot to')
+        '--index-plot-output-file', dest='index_plot_output_file',
+        default='', help='name of file to write index plot to')
+    parser.add_argument(
+        '--eof-output-file', dest='eof_output_file',
+        default='', help='name of file to write EOF to')
+    parser.add_argument(
+        '--eof-plot-output-file', dest='eof_plot_output_file',
+        default='', help='name of file to write EOF plots to')
+    parser.add_argument(
+        '--no-show-plots', dest='no_show_plots', action='store_true',
+        help='do not show plots')
+    parser.add_argument(
+        '--cpc-datafile', dest='cpc_datafile',
+        default='', help='datafile containing daily CPC index values')
 
     return parser.parse_args()
 
@@ -148,39 +231,53 @@ def parse_cmd_line_args():
 def main():
     args = parse_cmd_line_args()
 
-    time, lat, lon, z1000 = read_data(
-        args.datafile, time=args.time_field, lat=args.lat_field,
-        lon=args.lon_field, hgt=args.hgt_field)
+    if args.cpc_datafile:
+        cpc_times, cpc_index = read_cpc_data(args.cpc_datafile)
+    else:
+        cpc_times = None
+        cpc_index = None
 
-    daily_times, daily_z1000 = daily_means(time, z1000)
-    monthly_times, monthly_z1000 = monthly_means(daily_times, daily_z1000)
+    with xr.open_dataset(args.datafile) as ds:
+        hgt_data = ds[args.hgt_field]
 
-    ao_pcs, ao_eofs, ao_lat, ao_lon = calc_ao(
-        monthly_times, lat, lon, monthly_z1000,
-        start_year=args.start_year,
-        end_year=args.end_year)
+        ref_data = hgt_data.where(
+            (hgt_data[args.time_field].dt.year >= args.start_year) &
+            (hgt_data[args.time_field].dt.year <= args.end_year),
+            drop=True)
 
-    plot_pattern(ao_lat, ao_lon, ao_eofs, output_file=args.plot_output_file)
+        ref_anom_data, clim = calculate_monthly_region_anomalies(ref_data)
 
-    daily_base_period_mask = get_base_period_mask(
-        daily_times, args.start_year, args.end_year)
+        annual_eofs = calculate_annual_eof(
+            ref_anom_data, time_field=args.time_field,
+            lat_field=args.lat_field, hgt_field=args.hgt_field)
 
-    daily_clim = multiyear_daily_means(
-        daily_times[daily_base_period_mask],
-        daily_z1000[daily_base_period_mask])
+        if args.eof_output_file:
+            annual_eofs['eofs'].to_netcdf(args.eof_output_file)
 
-    daily_z1000_anom = daily_anomalies(
-        daily_times, daily_z1000, daily_clim)
+        if not args.no_show_plots or args.eof_plot_output_file:
+            plot_eofs(
+                annual_eofs['eofs'], output_file=args.eof_plot_output_file,
+                show_plot=(not args.no_show_plots))
 
-    normalization = ao_pcs.std(ddof=1)
+        ref_daily_anom_data, daily_clim = calculate_daily_region_anomalies(
+            ref_data)
+        daily_anom_data, _ = calculate_daily_region_anomalies(
+            hgt_data, climatology=daily_clim)
 
-    daily_ao_index_times, daily_ao_index = calc_ao_index(
-        daily_times, lat, lon, daily_z1000_anom,
-        ao_eofs, normalization=normalization)
+        index = calculate_ao_pc_index(
+            daily_anom_data, annual_eofs['eofs'],
+            time_field=args.time_field,
+            lat_field=args.lat_field,
+            normalization=annual_eofs['pcs'].std(args.time_field, ddof=1))
 
-    if args.index_output_file:
-        write_ao_index(
-            daily_ao_index_times, daily_ao_index, args.index_output_file)
+        write_index_values(index, output_file=args.index_output_file,
+                           time_field=args.time_field)
+
+        if not args.no_show_plots or args.index_plot_output_file:
+            plot_ao_index(index, cpc_times=cpc_times, cpc_index=cpc_index,
+                          output_file=args.index_plot_output_file,
+                          show_plots=(not args.no_show_plots),
+                          time_field=args.time_field)
 
 
 if __name__ == '__main__':
