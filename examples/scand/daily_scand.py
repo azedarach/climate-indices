@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
+from cartopy.util import add_cyclic_point
+
 from climate_indices.scand import (calculate_daily_region_anomalies,
                                    calculate_seasonal_eof,
                                    calculate_scand_pc_index)
@@ -42,8 +44,26 @@ def read_tibaldi_data(datafile):
     return times, index
 
 
-def plot_seasonal_eofs(seasonal_eofs, mode=0,
-                       output_file=None, show_plot=True):
+def plot_seasonal_eofs(seasonal_eofs, evr, mode=2,
+                       output_file=None, show_plot=True,
+                       lat_field=DEFAULT_LAT_FIELD,
+                       lon_field=DEFAULT_LON_FIELD,
+                       hgt_field=DEFAULT_HGT_FIELD,
+                       n_levels=7):
+    lat = seasonal_eofs[lat_field].values
+    lon = seasonal_eofs[lon_field].values
+    cyclic_lon = np.full(np.size(lon) + 1, 360.)
+    cyclic_lon[:-1] = lon
+
+    lon_grid, lat_grid = np.meshgrid(cyclic_lon, lat)
+
+    eof_vals = add_cyclic_point(np.squeeze(seasonal_eofs.values))
+
+    amin = np.abs(np.min(eof_vals))
+    amax = np.abs(np.max(eof_vals))
+    max_contour = amax if amax > amin else amin
+    levels = np.linspace(-max_contour, max_contour, n_levels)
+
     fig = plt.figure(figsize=FIGURE_SIZE)
     proj = ccrs.Orthographic(central_latitude=CENTRAL_LATITUDE,
                              central_longitude=CENTRAL_LONGITUDE)
@@ -52,8 +72,16 @@ def plot_seasonal_eofs(seasonal_eofs, mode=0,
     ax.coastlines()
     ax.set_global()
 
-    eof_data = seasonal_eofs[{'mode': mode}].squeeze()
-    eof_data.plot.contourf(ax=ax, transform=ccrs.PlateCarree())
+    ax.set_title(r'Mode {:d} ({:.2f}%)'.format(mode + 1, 100.0 * evr))
+
+    cs = ax.contourf(lon_grid, lat_grid, eof_vals,
+                     contour_levels=levels, cmap=CMAP,
+                     transform=ccrs.PlateCarree())
+
+    fig.colorbar(cs)
+
+    if output_file is not None and output_file:
+        plt.savefig(output_file)
 
     if show_plot:
         plt.show()
@@ -110,17 +138,19 @@ def plot_scand_index(index, tibaldi_times=None, tibaldi_index=None,
 
     ax = fig.add_subplot(111)
 
-    ax.plot(valid_times, valid_index, 'b-', label='SCAND index')
-
     if tibaldi_times is not None and tibaldi_index is not None:
         corr_coeff = get_correlation_coeff(
             times, index_vals, tibaldi_times, tibaldi_index)
         mask = np.zeros(tibaldi_times.shape, dtype=bool)
         for i, t in enumerate(tibaldi_times):
             mask[i] = t.year in valid_years
+        normalization = tibaldi_index.std()
         ax.plot(
-            tibaldi_times[mask], -tibaldi_index[mask], 'r--',
-            label='Tibaldi index (r = {:.2f})'.format(corr_coeff))
+            tibaldi_times[mask],
+            tibaldi_index[mask] / normalization, 'r--',
+            label='Normalized Tibaldi index (r = {:.2f})'.format(corr_coeff))
+
+    ax.plot(valid_times, valid_index, 'b-', label='SCAND index')
 
     ax.grid(ls='--', color='gray', alpha=0.7)
 
@@ -263,7 +293,9 @@ def main():
 
         if not args.no_show_plots or args.eof_plot_output_file:
             plot_seasonal_eofs(
-                seasonal_eofs['eofs'], output_file=args.eof_plot_output_file,
+                seasonal_eofs['eofs'],
+                seasonal_eofs['explained_variance_ratio'],
+                output_file=args.eof_plot_output_file,
                 show_plot=(not args.no_show_plots))
 
         anom_data, _ = calculate_daily_region_anomalies(

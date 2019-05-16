@@ -40,6 +40,7 @@ DEFAULT_CLIM_END_YEAR = 2018
 
 
 FIGURE_SIZE = (8, 11)
+INDEX_FIGURE_SIZE = (5, 5)
 N_COLS = 1
 N_ROWS = 5
 CMAP = plt.cm.RdBu_r
@@ -165,7 +166,7 @@ def plot_mei(index, esrl_times=None, esrl_index=None,
     valid_times = times[mask]
     valid_index = index_vals[mask]
 
-    fig = plt.figure(figsize=FIGURE_SIZE)
+    fig = plt.figure(figsize=INDEX_FIGURE_SIZE)
 
     ax = fig.add_subplot(111)
 
