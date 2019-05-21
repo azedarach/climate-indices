@@ -35,7 +35,7 @@ def _get_lat_weights(lats, lat_weights='scos'):
     _check_valid_lat_weights(lat_weights)
 
     if lat_weights is None or lat_weights == 'none':
-        return np.ones(lats.shape, lats.dtype)
+        return xr.full_like(lats, 1)
     elif lat_weights == 'cos':
         return np.cos(np.deg2rad(lats))
     else:
@@ -91,6 +91,28 @@ def _get_valid_data(data, season=DEFAULT_SEASON,
     return valid_data
 
 
+def _project_data(X, eofs, lat_weights='scos',
+                  time_field=DEFAULT_TIME_FIELD,
+                  lat_field=DEFAULT_LAT_FIELD):
+    n_samples = X.shape[0]
+    n_eofs = eofs.shape[0]
+    n_features = np.product(X.shape[1:])
+
+    lat_data = X[lat_field]
+
+    weights = _get_lat_weights(lat_data, lat_weights=lat_weights)
+    weights = xr.broadcast(X.isel({time_field: 0}), weights)[1]
+
+    weighted_data = weights.values * X.values
+
+    flat_data = np.reshape(weighted_data, (n_samples, n_features))
+    flat_eofs = np.reshape(eofs.values, (n_eofs, n_features))
+
+    sol = np.dot(flat_data, flat_eofs.T)
+
+    return sol
+
+
 def calculate_seasonal_eofs(anom_data, season=DEFAULT_SEASON,
                             lat_bounds=DEFAULT_LAT_BOUNDS,
                             lon_bounds=DEFAULT_LON_BOUNDS,
@@ -104,7 +126,7 @@ def calculate_seasonal_eofs(anom_data, season=DEFAULT_SEASON,
     valid_data = _get_valid_data(
         anom_data, season=season, lat_bounds=lat_bounds,
         lon_bounds=lon_bounds)
-    print(valid_data)
+
     lat_data = valid_data[lat_field]
 
     weights = _get_lat_weights(lat_data, lat_weights=lat_weights)
@@ -185,25 +207,33 @@ def cluster_pcs(pcs_da, time_field=DEFAULT_TIME_FIELD, **kwargs):
 def calculate_composites(anom_data, labels, season=DEFAULT_SEASON,
                          lat_bounds=DEFAULT_LAT_BOUNDS,
                          lon_bounds=DEFAULT_LON_BOUNDS,
-                         time_field=DEFAULT_TIME_FIELD):
+                         time_field=DEFAULT_TIME_FIELD,
+                         lat_field=DEFAULT_LAT_FIELD,
+                         lat_weights=DEFAULT_LAT_WEIGHTS):
     valid_data = _get_valid_data(
         anom_data, season=season, lat_bounds=lat_bounds,
         lon_bounds=lon_bounds)
 
     n_samples, n_clusters = labels.shape
-    labels_data = labels.values
 
     clusters = np.arange(n_clusters)
     composites_data = np.empty((n_clusters,) +
                                valid_data.isel({time_field: 0}).shape)
 
-    time_axis = valid_data.get_axis_num(time_field)
-
     for i, k in enumerate(clusters):
-        mask = labels_data[:, k] == 1
-        cluster_data = valid_data.values[mask]
-        cluster_mean = cluster_data.mean(axis=time_axis)
-        composites_data[i] = cluster_mean
+        cluster_data = valid_data.where(
+            labels.sel({CLUSTER_DIM_NAME: k}) == 1, drop=True)
+
+        cluster_mean = cluster_data.mean(time_field)
+
+        weights = _get_lat_weights(cluster_data[lat_field],
+                                   lat_weights=lat_weights)
+        weights = xr.broadcast(cluster_mean, weights)[1]
+        weighted_mean = weights * cluster_mean
+
+        weighted_mean = weighted_mean / np.sqrt(np.sum(weighted_mean ** 2))
+
+        composites_data[i] = weighted_mean.values
 
     composites_dims = ([CLUSTER_DIM_NAME] +
                        [d for d in valid_data.dims if d != time_field])
@@ -218,3 +248,39 @@ def calculate_composites(anom_data, labels, season=DEFAULT_SEASON,
                                  coords=composites_coords.coords)
 
     return composites_da
+
+
+def calculate_kmeans_pc_index(anom_data, composites_data,
+                              clim_start_year=None,
+                              clim_end_year=None, ddof=0,
+                              time_field=DEFAULT_TIME_FIELD,
+                              lat_field=DEFAULT_LAT_FIELD):
+    if clim_start_year is None:
+        clim_start_year = int(anom_data[time_field].dt.year.min())
+    if clim_end_year is None:
+        clim_end_year = int(anom_data[time_field].dt.year.max())
+
+    n_patterns = composites_data.shape[0]
+
+    proj = _project_data(anom_data, composites_data,
+                         time_field=time_field, lat_field=lat_field)
+
+    proj_dims = [time_field, CLUSTER_DIM_NAME]
+    proj_coords = {time_field: anom_data[time_field].values,
+                   CLUSTER_DIM_NAME: np.arange(n_patterns)}
+    proj_da = xr.DataArray(proj, dims=proj_dims, coords=proj_coords)
+
+    mean = proj_da.where((proj_da[time_field].dt.year >= clim_start_year) &
+                         (proj_da[time_field].dt.year <= clim_end_year)).mean(
+        time_field)
+    std = proj_da.where((proj_da[time_field].dt.year >= clim_start_year) &
+                        (proj_da[time_field].dt.year <= clim_end_year)).std(
+        time_field, ddof=ddof)
+
+    proj_da = (proj_da - mean) / std
+
+    return proj_da
+
+
+__all__ = ['calculate_composites', 'calculate_seasonal_eofs',
+           'cluster_pcs', 'calculate_kmeans_pc_index']
