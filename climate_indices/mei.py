@@ -1,3 +1,4 @@
+import datetime
 import numpy as np
 import xarray as xr
 
@@ -50,6 +51,17 @@ def get_season_name(s):
         return SEASONS[s - 1][0]
     else:
         raise ValueError('invalid season index %d' % s)
+
+
+def calculate_daily_anomalies(ds, climatology=None,
+                              time_field=DEFAULT_TIME_FIELD):
+    if climatology is None:
+        climatology = ds.groupby(
+            ds[time_field].dt.dayofyear).mean(time_field)
+
+    anom = ds.groupby(ds[time_field].dt.dayofyear) - climatology
+
+    return anom, climatology
 
 
 def calculate_monthly_anomalies(ds, climatology=None,
@@ -340,9 +352,75 @@ def calculate_seasonal_mei(anom_ds, eofs_ds, ref_pcs_da,
     return pcs_da
 
 
+def calculate_daily_mei(anom_ds, eofs_ds, ref_pcs_da,
+                        time_field=DEFAULT_TIME_FIELD,
+                        lat_field=DEFAULT_LAT_FIELD, lat_weights='scos',
+                        variables=DEFAULT_VARIABLES, interpolate=True):
+    n_times = anom_ds.sizes[time_field]
+
+    pcs_values = np.empty((n_times,))
+
+    for i in range(n_times):
+        month = anom_ds[time_field].ds.month.values[i]
+        data = anom_ds.isel({time_field: i})
+        if interpolate and i != n_times - 1:
+            data_date = datetime.datetime(
+                int(data[time_field].dt.year.values),
+                month, int(data[time_field].dt.day.values))
+            season_start_date = datetime.datetime(
+                int(data[time_field].dt.year.values),
+                month, 1)
+
+            if month == 12:
+                next_month = 1
+                next_season_date = datetime.datetime(
+                    int(data[time_field].dt.year.values + 1),
+                    next_month, 1)
+            else:
+                next_month = month + 1
+                next_season_date = datetime.datetime(
+                    int(data[time_field].dt.year.values),
+                    next_month, 1)
+
+            frac = ((data_date - season_start_date) /
+                    (next_season_date - season_start_date))
+
+            current_season_eofs_ds = eofs_ds.where(
+                eofs_ds[SEASON_DIM_NAME] == month, drop=True)
+            next_season_eofs_ds = eofs_ds.where(
+                eofs_ds[SEASON_DIM_NAME] == next_month, drop=True)
+
+            season_eofs_ds = (frac * current_season_eofs_ds +
+                              (1 - frac) * next_season_eofs_ds)
+            season_ref_pcs = ref_pcs_da.where(
+                ref_pcs_da[time_field].dt.month == month, drop=True)
+            normalization = season_ref_pcs.std(time_field).values[0]
+        else:
+            season_eofs_ds = current_season_eofs_ds
+            season_ref_pcs = ref_pcs_da.where(
+                ref_pcs_da[time_field].dt.month == month, drop=True)
+            normalization = season_ref_pcs.std(time_field).values[0]
+
+        season_pcs = _project_data(data, season_eofs_ds,
+                                   lat_weights=lat_weights,
+                                   time_field=time_field,
+                                   lat_field=lat_field,
+                                   variables=variables)
+
+        pcs_values[i] = season_pcs[:, 0] / normalization
+
+    pcs_dims = [time_field]
+    pcs_coords = {time_field: anom_ds[time_field].values}
+    pcs_da = xr.DataArray(pcs_values, dims=pcs_dims, coords=pcs_coords)
+
+    return pcs_da
+
+
 __all__ = ['EOF_DIM_NAME', 'SEASON_DIM_NAME',
            'calculate_seasonal_eofs',
+           'calculate_daily_mei',
            'calculate_seasonal_mei',
+           'calculate_daily_anomalies',
            'calculate_monthly_anomalies',
            'calculate_seasonal_anomalies',
            'get_season_name',
