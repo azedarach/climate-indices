@@ -325,7 +325,8 @@ def calculate_seasonal_mei(anom_ds, eofs_ds, ref_pcs_da,
         season_pcs = _project_data(season_ds, season_eofs_ds,
                                    lat_weights=lat_weights,
                                    time_field=time_field,
-                                   lat_field=lat_field)
+                                   lat_field=lat_field,
+                                   variables=variables)
 
         pcs_values[mask] = season_pcs[:, 0]
         normalization = season_ref_pcs.std(time_field).values[0]
