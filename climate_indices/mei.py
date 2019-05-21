@@ -361,7 +361,7 @@ def calculate_daily_mei(anom_ds, eofs_ds, ref_pcs_da,
     pcs_values = np.empty((n_times,))
 
     for i in range(n_times):
-        month = anom_ds[time_field].ds.month.values[i]
+        month = anom_ds[time_field].dt.month.values[i]
         data = anom_ds.isel({time_field: i})
         if interpolate and i != n_times - 1:
             data_date = datetime.datetime(
