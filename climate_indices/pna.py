@@ -83,12 +83,15 @@ def calculate_monthly_region_anomalies(hgt_data, climatology=None,
         (hgt_data[lat_field] >= MIN_LATITUDE) &
         (hgt_data[lat_field] <= MAX_LATITUDE), drop=True)
 
-    if climatology is None:
-        climatology = valid_data.groupby(
-            valid_data[time_field].dt.month).mean(time_field)
+    monthly_data = valid_data.resample({time_field: '1M'}).mean(
+        time_field)
 
-    anom = valid_data.groupby(
-        valid_data[time_field].dt.month) - climatology
+    if climatology is None:
+        climatology = monthly_data.groupby(
+            monthly_data[time_field].dt.month).mean(time_field)
+
+    anom = monthly_data.groupby(
+        monthly_data[time_field].dt.month) - climatology
 
     return anom, climatology
 
