@@ -143,11 +143,17 @@ def _get_combined_data(ds, variables=DEFAULT_VARIABLES,
     n_variables = len(variables)
     var_data = {v: ds[v] for v in variables}
 
-    n_samples = ds[time_field].shape[0]
+    if ds[time_field].shape:
+        n_samples = ds[time_field].shape[0]
+    else:
+        n_samples = 1
 
     flat_var_data = [None] * n_variables
     for i, v in enumerate(variables):
-        var_shape = var_data[v].isel({time_field: 0}).shape
+        if n_samples == 1:
+            var_shape = var_data[v].shape
+        else:
+            var_shape = var_data[v].isel({time_field: 0}).shape
         n_features = np.product(var_shape)
         flat_var_data[i] = np.reshape(
             var_data[v].values, (n_samples, n_features))
@@ -385,13 +391,12 @@ def calculate_daily_mei(anom_ds, eofs_ds, ref_pcs_da,
             frac = ((data_date - season_start_date) /
                     (next_season_date - season_start_date))
 
-            current_season_eofs_ds = eofs_ds.where(
-                eofs_ds[SEASON_DIM_NAME] == month, drop=True)
-            next_season_eofs_ds = eofs_ds.where(
-                eofs_ds[SEASON_DIM_NAME] == next_month, drop=True)
+            current_season_eofs_ds = eofs_ds.sel({SEASON_DIM_NAME: month})
+            next_season_eofs_ds = eofs_ds.sel({SEASON_DIM_NAME: next_month})
 
             season_eofs_ds = (frac * current_season_eofs_ds +
                               (1 - frac) * next_season_eofs_ds)
+
             season_ref_pcs = ref_pcs_da.where(
                 ref_pcs_da[time_field].dt.month == month, drop=True)
             normalization = season_ref_pcs.std(time_field).values[0]
