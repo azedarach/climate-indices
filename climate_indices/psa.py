@@ -182,7 +182,13 @@ def calculate_psa1_real_pc_index(anom_data, eofs_data,
                                  lat_weights='scos',
                                  time_field=DEFAULT_TIME_FIELD,
                                  lat_field=DEFAULT_LAT_FIELD,
-                                 normalization=1):
+                                 clim_start_year=None,
+                                 clim_end_year=None):
+    if clim_start_year is None:
+        clim_start_year = int(anom_data[time_field].dt.year.min())
+    if clim_end_year is None:
+        clim_end_year = int(anom_data[time_field].dt.year.max())
+
     n_eofs = eofs_data.shape[0]
 
     pcs = _project_data(anom_data, eofs_data, lat_weights=lat_weights,
@@ -193,12 +199,19 @@ def calculate_psa1_real_pc_index(anom_data, eofs_data,
                   EOF_DIM_NAME: np.arange(n_eofs)}
     pcs_da = xr.DataArray(pcs, dims=pcs_dims, coords=pcs_coords)
 
-    pcs_da = pcs_da / normalization
+    mean = pcs_da.where((pcs_da[time_field].dt.year >= clim_start_year) &
+                        (pcs_da[time_field].dt.year <= clim_end_year)).mean(
+        time_field)
+    std = pcs_da.where((pcs_da[time_field].dt.year >= clim_start_year) &
+                       (pcs_da[time_field].dt.year <= clim_end_year)).std(
+        time_field, ddof=ddof)
+
+    pcs_da = (pcs_da - mean) / std
 
     return pcs_da
 
 
 __all__ = ['calculate_daily_region_anomalies',
            'calculate_monthly_region_anomalies',
-           'calculate_annual_eof',
+           'calculate_seasonal_eof',
            'calculate_psa1_real_pc_index']
