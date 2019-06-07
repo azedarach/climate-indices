@@ -213,7 +213,8 @@ def calculate_composites(anom_data, labels, season=DEFAULT_SEASON,
                          lat_weights=DEFAULT_LAT_WEIGHTS):
     valid_data = _get_valid_data(
         anom_data, season=season, lat_bounds=lat_bounds,
-        lon_bounds=lon_bounds)
+        lon_bounds=lon_bounds, time_field=time_field,
+        lat_field=lat_field)
 
     n_samples, n_clusters = labels.shape
 
