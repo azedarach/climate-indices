@@ -125,7 +125,8 @@ def calculate_seasonal_eofs(anom_data, season=DEFAULT_SEASON,
                             random_state=None):
     valid_data = _get_valid_data(
         anom_data, season=season, lat_bounds=lat_bounds,
-        lon_bounds=lon_bounds)
+        lon_bounds=lon_bounds, time_field=time_field,
+        lat_field=lat_field, lon_field=lon_field)
 
     lat_data = valid_data[lat_field]
 
