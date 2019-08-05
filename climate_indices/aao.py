@@ -146,10 +146,10 @@ def calculate_annual_eof(anom_data, aao_mode=DEFAULT_AAO_MODE,
 
 def _fix_phase(eofs_data, time_field=DEFAULT_TIME_FIELD,
                lat_field=DEFAULT_LAT_FIELD):
-    lat_max = eofs_data.where(eofs_data == eofs_data.max(),
-                              drop=True)[lat_field]
-    lat_min = eofs_data.where(eofs_data == eofs_data.min(),
-                              drop=True)[lat_field]
+    lat_max = np.asscalar(eofs_data.where(eofs_data == eofs_data.max(),
+                                          drop=True)[lat_field])
+    lat_min = np.asscalar(eofs_data.where(eofs_data == eofs_data.min(),
+                                          drop=True)[lat_field])
 
     if lat_max < lat_min:
         return -eofs_data
