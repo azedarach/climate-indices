@@ -144,6 +144,19 @@ def calculate_annual_eof(anom_data, aao_mode=DEFAULT_AAO_MODE,
     return annual_eofs
 
 
+def _fix_phase(eofs_data, time_field=DEFAULT_TIME_FIELD,
+               lat_field=DEFAULT_LAT_FIELD):
+    lat_max = eofs_data.where(eofs_data == eofs_data.max(),
+                              drop=True)[lat_field]
+    lat_min = eofs_data.where(eofs_data == eofs_data.min(),
+                              drop=True)[lat_field]
+
+    if lat_max < lat_min:
+        return -eofs_data
+    else:
+        return eofs_data
+
+
 def calculate_aao_pc_index(anom_data, eofs_data,
                            ddof=0,
                            lat_weights='scos',
@@ -152,7 +165,9 @@ def calculate_aao_pc_index(anom_data, eofs_data,
                            normalization=1):
     n_eofs = eofs_data.shape[0]
 
-    pcs = _project_data(anom_data, eofs_data, lat_weights=lat_weights,
+    pos_phase_pattern = _fix_phase(eofs_data, time_field=time_field,
+                                   lat_field=lat_field)
+    pcs = _project_data(anom_data, pos_phase_pattern, lat_weights=lat_weights,
                         time_field=time_field, lat_field=lat_field)
 
     pcs_dims = [time_field, EOF_DIM_NAME]
