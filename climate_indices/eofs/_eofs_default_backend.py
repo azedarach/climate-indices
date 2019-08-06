@@ -100,6 +100,94 @@ def _calc_svd_default(X, k):
 
 def _calc_eofs_default_svd(X, n_components=None, rowvar=True, center=True,
                            bias=False, ddof=None, normalize_pcs=False):
+    """Calculate standard EOFs using SVD of data matrix.
+
+    Given a data matrix X in which each row corresponds to a variable
+    (i.e., each column is a separate observation), the rank-k SVD of
+    X is first computed as
+
+        X ~= U_k * Sigma_k * V_k^T ,
+
+    where k = n_components is the number of EOFs to retain, and U_k,
+    Sigma_k, V_k are the truncated SVD factors.
+
+    In the case that the principal components are not normalized, the
+    PCs are then given by
+
+        PCs = Sigma_k * V_k^T ,
+
+    and the corresponding EOFs are
+
+        EOFs = U_k ,
+
+    such that the reconstructed data matrix is X_rec = EOFs * PCs.
+
+    Note that, with these conventions, the sample covariance matrix is
+    given by::
+
+        C = X * X^T / (n_samples - ddof)
+          ~= U_k Sigma_k^2 U_k.T / (n_samples - ddof) .
+
+    Hence, the variance explained by each mode i is given by
+    S_{ii}^2 / (n_samples - ddof).
+
+    Variables with partially missing values are not supported, that is,
+    a variable must either have no missing values or must have all
+    missing values. In the latter case, the variable is ignored in the
+    analysis.
+
+    Parameters
+    ----------
+    X : array-like, shape (n_variables, n_samples) or (n_samples, n_variables)
+        Data array containing data to analyse. If rowvar=True (default),
+        each row of X is taken to correspond to a separate variable.
+        Otherwise, the columns of X are taken to correspond to separate
+        variables.
+
+    n_components : integer or None
+        If an integer, the number of principal components to retain.
+        If None, all variables are kept.
+
+    rowvar : boolean, default: True
+        If True, the rows of X are taken to correspond to variables.
+        If False, the columns of X are taken to correspond to variables.
+
+    center : boolean, default: True
+        If True, center the data before performing the SVD by subtracting
+        the mean of each variable.
+
+    bias : boolean, default: False
+        If False, normalize the covariance matrix by n_samples - 1.
+        If True, normalize by n_samples. These values may be overridden
+        by using the ddof argument.
+
+    ddof : integer or None
+        If an integer, normalize the covariance matrix by n_samples - ddof.
+        Note that this overrides the value implied by the bias argument.
+
+    normalize_pcs : boolean, default: False
+        If True, the returned PCs are normalized to have unit variance.
+        If False, the returned PCs are scaled by the singular values
+        of X.
+
+    Returns
+    -------
+    eofs : array-like, shape (n_variables, n_components) or (n_components, n_variables)
+        Array containing the EOFs of the data.
+
+    pcs : array-like, shape (n_components, n_samples) or (n_samples, n_components)
+
+    ev : array, shape (n_components,)
+        The variance explained by each of the EOF modes.
+
+    evr : array, shape (n_components,)
+        The fraction of the total variance explained by each EOF mode.
+        The total fraction of the variance explained is given by
+        the sum the entries.
+
+    sv : array, shape (n_components,)
+        The leading singular values of the given data.
+    """
     _check_fixed_missing_values(X, rowvar=rowvar)
 
     if ddof is None:
@@ -141,7 +229,7 @@ def _calc_eofs_default_svd(X, n_components=None, rowvar=True, center=True,
     else:
         eofs = np.full((n_components, n_features), np.NaN)
         if normalize_pcs:
-            eofs[:, valid_vars] = np.dot(s / np.sqrt(fact), vt)
+            eofs[:, valid_vars] = np.dot(np.diag(s) / np.sqrt(fact), vt)
             pcs = np.sqrt(fact) * u
         else:
             eofs[:, valid_vars] = vt
@@ -152,6 +240,69 @@ def _calc_eofs_default_svd(X, n_components=None, rowvar=True, center=True,
 
 def _calc_eofs_default_cov(X, n_components=None, rowvar=True, center=True,
                            bias=False, ddof=None, normalize_pcs=False):
+    """Calculate standard EOFs using eigendecomposition of covariance matrix.
+
+    Given a data matrix X in which each row corresponds to a variable
+    (i.e., each column is a separate observation), the covariance matrix
+    is formed according to::
+
+        C = X * X^T / (n_samples - ddof)
+
+    where n_samples is the number of observations (columns) and ddof
+    is the bias correction determined from the bias and ddof parameters.
+    The eigenvalues and eigenvectors of the symmetric covariance matrix
+    are computed, and, in the case that the PCs are not normalized to
+    unit variance, the EOFs are then given by the eigenvectors of C.
+
+    Parameters
+    ----------
+    X : array-like, shape (n_variables, n_samples) or (n_samples, n_variables)
+        Data array containing data to analyse. If rowvar=True (default),
+        each row of X is taken to correspond to a separate variable.
+        Otherwise, the columns of X are taken to correspond to separate
+        variables.
+
+    n_components : integer or None
+        If an integer, the number of principal components to retain.
+        If None, all variables are kept.
+
+    rowvar : boolean, default: True
+        If True, the rows of X are taken to correspond to variables.
+        If False, the columns of X are taken to correspond to variables.
+
+    center : boolean, default: True
+        If True, center the data before performing the SVD by subtracting
+        the mean of each variable.
+
+    bias : boolean, default: False
+        If False, normalize the covariance matrix by n_samples - 1.
+        If True, normalize by n_samples. These values may be overridden
+        by using the ddof argument.
+
+    ddof : integer or None
+        If an integer, normalize the covariance matrix by n_samples - ddof.
+        Note that this overrides the value implied by the bias argument.
+
+    normalize_pcs : boolean, default: False
+        If True, the returned PCs are normalized to have unit variance.
+        If False, the returned PCs are scaled by the singular values
+        of X.
+
+    Returns
+    -------
+    eofs : array-like, shape (n_variables, n_components) or (n_components, n_variables)
+        Array containing the EOFs of the data.
+
+    pcs : array-like, shape (n_components, n_samples) or (n_samples, n_components)
+
+    ev : array, shape (n_components,)
+        The variance explained by each of the EOF modes.
+
+    evr : array, shape (n_components,)
+        The fraction of the total variance explained by each EOF mode.
+        The total fraction of the variance explained is given by
+        the sum the entries.
+    """
     if ddof is None:
         if bias:
             ddof = 0
@@ -197,7 +348,7 @@ def _calc_eofs_default_cov(X, n_components=None, rowvar=True, center=True,
     else:
         eofs = np.full((n_components, n_features), np.NaN)
         if normalize_pcs:
-            eofs[:, non_missing_vars] = np.dot(v.T, np.diag(1 / np.sqrt(w)))
+            eofs[:, non_missing_vars] = np.dot(np.diag(1 / np.sqrt(w)), v.T)
             pcs = np.dot(X[:, non_missing_vars], eofs[:, non_missing_vars].T)
         else:
             eofs[:, non_missing_vars] = v.T
@@ -206,7 +357,64 @@ def _calc_eofs_default_cov(X, n_components=None, rowvar=True, center=True,
     return eofs, pcs, ev, evr
 
 
-def _calc_eofs_default(X, rowvar=True, method=None, **kwargs):
+def _calc_eofs_default(X, n_components=None, rowvar=True, method=None,
+                       **kwargs):
+    """Calculate EOFs of the given dataset.
+
+    Parameters
+    ----------
+    X : array-like, shape (n_variables, n_samples) or (n_samples, n_variables)
+        Data array containing data to analyse. If rowvar=True (default),
+        each row of X is taken to correspond to a separate variable.
+        Otherwise, the columns of X are taken to correspond to separate
+        variables.
+
+    n_components : integer or None
+        If an integer, the number of principal components to retain.
+        If None, all variables are kept.
+
+    rowvar : boolean, default: True
+        If True, the rows of X are taken to correspond to variables.
+        If False, the columns of X are taken to correspond to variables.
+
+    method : None | 'svd' | 'cov'
+        The method used to compute the EOFs and PCs. If None, defaults to
+        'svd' if the data has fixed location missing values, and 'cov'
+        otherwise.
+
+    center : boolean, default: True
+        If True, center the data before performing the SVD by subtracting
+        the mean of each variable.
+
+    bias : boolean, default: False
+        If False, normalize the covariance matrix by n_samples - 1.
+        If True, normalize by n_samples. These values may be overridden
+        by using the ddof argument.
+
+    ddof : integer or None
+        If an integer, normalize the covariance matrix by n_samples - ddof.
+        Note that this overrides the value implied by the bias argument.
+
+    normalize_pcs : boolean, default: False
+        If True, the returned PCs are normalized to have unit variance.
+        If False, the returned PCs are scaled by the singular values
+        of X.
+
+    Returns
+    -------
+    eofs : array-like, shape (n_variables, n_components) or (n_components, n_variables)
+        Array containing the EOFs of the data.
+
+    pcs : array-like, shape (n_components, n_samples) or (n_samples, n_components)
+
+    ev : array, shape (n_components,)
+        The variance explained by each of the EOF modes.
+
+    evr : array, shape (n_components,)
+        The fraction of the total variance explained by each EOF mode.
+        The total fraction of the variance explained is given by
+        the sum the entries.
+    """
     if X.ndim < 2:
         raise ValueError(
             'Matrix with at least two dimensions expected '
