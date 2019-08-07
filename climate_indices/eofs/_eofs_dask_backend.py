@@ -88,20 +88,22 @@ def _check_fixed_missing_values(X, rowvar=True):
 
 def _get_valid_variables(X, rowvar=True):
     if rowvar:
-        valid_vars = da.where(da.logical_not(da.isnan(X[:, 0])))[0]
+        valid_vars = da.nonzero(da.logical_not(
+            da.isnan(X[:, 0])))[0].compute()
         valid_data = X[valid_vars]
     else:
-        valid_vars = da.where(da.logical_not(da.isnan(X[0])))[0]
+        valid_vars = da.nonzero(da.logical_not(
+            da.isnan(X[0])))[0].compute()
         valid_data = X[:, valid_vars]
 
     return valid_data, valid_vars
 
 
 def _calc_svd_dask(X, k, compressed=True,
-                   n_power_iter=0, seed=None, compute=False):
+                   n_power_iter=0, seed=None):
     if compressed:
         dsvd = da.linalg.svd_compressed(X, k=k, n_power_iter=n_power_iter,
-                                        seed=seed, compute=compute)
+                                        seed=seed)
         u, s, vt = (x.compute() for x in dsvd)
     else:
         dsvd = da.linalg.svd(X)
@@ -117,8 +119,7 @@ def _calc_svd_dask(X, k, compressed=True,
 
 def _calc_eofs_dask_svd(X, n_components=None, rowvar=True, center=True,
                         bias=False, ddof=None, normalize_pcs=False,
-                        compressed=True, n_power_iter=0, seed=None,
-                        compute=False):
+                        compressed=False, n_power_iter=4, seed=None):
     """Calculate standard EOFs using SVD of data matrix.
 
     Given a data matrix X in which each row corresponds to a variable
@@ -233,29 +234,64 @@ def _calc_eofs_dask_svd(X, n_components=None, rowvar=True, center=True,
 
     u, s, vt = _calc_svd_dask(valid_data, k=n_components,
                               compressed=compressed,
-                              n_power_iter=n_power_iter, seed=seed,
-                              compute=compute)
+                              n_power_iter=n_power_iter, seed=seed)
 
     variances = da.var(X, ddof=ddof, axis=rowvar)
     ev = s ** 2 / fact
     evr = ev / variances.sum()
 
     if rowvar:
-        eofs = da.full((n_features, n_components), np.NaN)
         if normalize_pcs:
-            eofs[valid_vars] = da.dot(u, da.diag(s)) / np.sqrt(fact)
+            scaled_u = da.matmul(u, da.diag(s))
+            eof_rows = [None] * n_features
+            row_pos = 0
+            for i in range(n_features):
+                if i in valid_vars:
+                    eof_rows[i] = scaled_u[row_pos]
+                    row_pos += 1
+                else:
+                    eof_rows[i] = da.full((1, n_components), np.NaN)
+            eofs = da.vstack(eof_rows)
             pcs = np.sqrt(fact) * vt
         else:
-            eofs[valid_vars] = u
-            pcs = da.dot(da.diag(s), vt)
+            scaled_u = u
+            eof_rows = [None] * n_features
+            row_pos = 0
+            for i in range(n_features):
+                if i in valid_vars:
+                    eof_rows[i] = scaled_u[row_pos]
+                    row_pos += 1
+                else:
+                    eof_rows[i] = da.full((1, n_components), np.NaN)
+            eofs = da.vstack(eof_rows)
+            pcs = da.matmul(da.diag(s), vt)
     else:
-        eofs = da.full((n_components, n_features), np.NaN)
         if normalize_pcs:
-            eofs[:, valid_vars] = da.dot(da.diag(s) / np.sqrt(fact), vt)
+            scaled_vt = da.matmul(da.diag(s) / np.sqrt(fact), vt)
+            eof_cols = [None] * n_features
+            col_pos = 0
+            for i in range(n_features):
+                if i in valid_vars:
+                    eof_cols[i] = np.reshape(scaled_vt[:, col_pos],
+                                             (n_components, 1))
+                    col_pos += 1
+                else:
+                    eof_cols[i] = da.full((n_components, 1), np.NaN)
+            eofs = da.hstack(eof_cols)
             pcs = np.sqrt(fact) * u
         else:
-            eofs[:, valid_vars] = vt
-            pcs = da.dot(u, da.diag(s))
+            scaled_vt = vt
+            eof_cols = [None] * n_features
+            col_pos = 0
+            for i in range(n_features):
+                if i in valid_vars:
+                    eof_cols[i] = np.reshape(scaled_vt[:, col_pos],
+                                             (n_components, 1))
+                    col_pos += 1
+                else:
+                    eof_cols[i] = da.full((n_components, 1), np.NaN)
+            eofs = da.hstack(eof_cols)
+            pcs = da.matmul(u, da.diag(s))
 
     return eofs, pcs, ev, evr, s
 

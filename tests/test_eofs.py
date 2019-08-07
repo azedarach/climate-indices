@@ -1381,77 +1381,84 @@ class TestDaskBackendHelpers(unittest.TestCase):
         self.assertTrue(da.all(X_expected == X_valid))
         self.assertTrue(da.all(valid_mask == np.array([0, 1, 2, 3, 4, 6])))
 
-#     def test_get_valid_variables_colvar(self):
-#         random_seed = 0
-#         rng = np.random.RandomState(seed=random_seed)
+    def test_get_valid_variables_colvar(self):
+        random_seed = 0
+        rng = np.random.RandomState(seed=random_seed)
 
-#         n_samples = 40
-#         n_features = 4
+        n_samples = 40
+        n_features = 4
 
-#         X = _random_anomalies((n_samples, n_features), random_state=rng,
-#                               rowvar=False)
+        X = da.from_array(_random_anomalies(
+            (n_samples, n_features), random_state=rng,
+            rowvar=False))
 
-#         X_valid, valid_mask = eofs_default._get_valid_variables(
-#             X, rowvar=False)
+        X_valid, valid_mask = eofs_dask._get_valid_variables(
+            X, rowvar=False)
 
-#         self.assertTrue(np.all(X == X_valid))
-#         self.assertTrue(np.all(valid_mask == np.arange(n_features)))
+        self.assertTrue(da.all(X == X_valid))
+        self.assertTrue(da.all(valid_mask == np.arange(n_features)))
 
-#         X[:, 0] = np.NaN
-#         X[:, 3] = np.NaN
+        X = _random_anomalies(
+            (n_samples, n_features), random_state=rng,
+            rowvar=False)
+        X[:, 0] = np.NaN
+        X[:, 3] = np.NaN
+        X = da.from_array(X)
 
-#         X_valid, valid_mask = eofs_default._get_valid_variables(
-#             X, rowvar=False)
+        X_valid, valid_mask = eofs_dask._get_valid_variables(
+            X, rowvar=False)
 
-#         X_expected = np.empty((n_samples, n_features - 2))
-#         X_expected[:, 0] = X[:, 1]
-#         X_expected[:, 1] = X[:, 2]
+        X_expected = np.empty((n_samples, n_features - 2))
+        X_expected[:, 0] = X[:, 1]
+        X_expected[:, 1] = X[:, 2]
 
-#         self.assertTrue(np.all(X_expected == X_valid))
-#         self.assertTrue(np.all(valid_mask == np.array([1, 2])))
+        self.assertTrue(da.all(X_expected == X_valid))
+        self.assertTrue(da.all(valid_mask == np.array([1, 2])))
 
 
-# class TestStandardEOFsDefaultBackend(unittest.TestCase):
+class TestStandardEOFsDaskBackend(unittest.TestCase):
 
-#     def test_standard_eof_reconstruction_2d_svd_rowvar(self):
-#         random_seed = 0
-#         rng = np.random.RandomState(seed=random_seed)
+    def test_standard_eof_reconstruction_2d_svd_rowvar(self):
+        random_seed = 0
+        rng = np.random.RandomState(seed=random_seed)
 
-#         n_samples = 100
-#         n_features = 7
+        n_samples = 100
+        n_features = 7
 
-#         X = _random_anomalies((n_features, n_samples),
-#                               random_state=rng, rowvar=True)
+        X = da.from_array(
+            _random_anomalies((n_features, n_samples),
+                              random_state=rng, rowvar=True))
 
-#         eofs, pcs, ev, evr, _ = eofs_default._calc_eofs_default_svd(
-#             X, rowvar=True)
+        eofs, pcs, ev, evr, _ = eofs_dask._calc_eofs_dask_svd(
+            X, rowvar=True)
 
-#         self.assertTrue(eofs.shape == (n_features, n_features))
-#         self.assertTrue(pcs.shape == (n_features, n_samples))
+        self.assertTrue(eofs.shape == (n_features, n_features))
+        self.assertTrue(pcs.shape == (n_features, n_samples))
 
-#         X_rec = np.dot(eofs, pcs)
+        X_rec = da.matmul(eofs, pcs)
 
-#         self.assertTrue(np.allclose(X_rec, X))
+        self.assertTrue(da.allclose(X_rec, X).compute())
 
-#     def test_standard_eof_reconstruction_2d_svd_colvar(self):
-#         random_seed = 0
-#         rng = np.random.RandomState(seed=random_seed)
+    def test_standard_eof_reconstruction_2d_svd_colvar(self):
+        random_seed = 0
+        rng = np.random.RandomState(seed=random_seed)
 
-#         n_samples = 50
-#         n_features = 5
+        n_samples = 50
+        n_features = 5
 
-#         X = _random_anomalies((n_samples, n_features), random_state=rng,
-#                               rowvar=False)
+        X = da.from_array(_random_anomalies(
+            (n_samples, n_features), random_state=rng,
+            rowvar=False))
 
-#         eofs, pcs, ev, evr, _ = eofs_default._calc_eofs_default_svd(
-#             X, rowvar=False)
+        eofs, pcs, ev, evr, _ = eofs_dask._calc_eofs_dask_svd(
+            X, rowvar=False)
 
-#         self.assertTrue(eofs.shape == (n_features, n_features))
-#         self.assertTrue(pcs.shape == (n_samples, n_features))
+        self.assertTrue(eofs.shape == (n_features, n_features))
+        self.assertTrue(pcs.shape == (n_samples, n_features))
 
-#         X_rec = np.dot(pcs, eofs)
+        X_rec = da.matmul(pcs, eofs)
 
-#         self.assertTrue(np.allclose(X_rec, X))
+        self.assertTrue(np.allclose(X_rec, X))
 
 #     def test_standard_eof_reconstruction_2d_cov_rowvar(self):
 #         random_seed = 0
@@ -1493,75 +1500,83 @@ class TestDaskBackendHelpers(unittest.TestCase):
 
 #         self.assertTrue(np.allclose(X_rec, X))
 
-#     def test_standard_eof_reconstruction_2d_svd_missing_rowvar(self):
-#         random_seed = 0
-#         rng = np.random.RandomState(seed=random_seed)
+    def test_standard_eof_reconstruction_2d_svd_missing_rowvar(self):
+        random_seed = 0
+        rng = np.random.RandomState(seed=random_seed)
 
-#         n_samples = 68
-#         n_features = 14
+        n_samples = 68
+        n_features = 14
 
-#         X = _random_anomalies((n_features, n_samples), random_state=rng,
-#                               rowvar=True)
+        X = _random_anomalies((n_features, n_samples), random_state=rng,
+                              rowvar=True)
 
-#         X[1, 4] = np.NaN
+        X[1, 4] = np.NaN
 
-#         with self.assertRaises(ValueError):
-#             eofs_default._calc_eofs_default_svd(X, rowvar=True)
+        X = da.from_array(X)
 
-#         X = _random_anomalies((n_features, n_samples), random_state=rng,
-#                               rowvar=True)
+        with self.assertRaises(ValueError):
+            eofs_dask._calc_eofs_dask_svd(X, rowvar=True)
 
-#         X[5, :] = np.NaN
+        X = _random_anomalies((n_features, n_samples), random_state=rng,
+                              rowvar=True)
 
-#         eofs, pcs, ev, evr, _ = eofs_default._calc_eofs_default_svd(
-#             X, rowvar=True)
+        X[5, :] = np.NaN
 
-#         self.assertTrue(eofs.shape == (n_features, n_features - 1))
-#         self.assertTrue(pcs.shape == (n_features - 1, n_samples))
+        X = da.from_array(X)
 
-#         self.assertTrue(np.all(np.isnan(eofs[5])))
+        eofs, pcs, ev, evr, _ = eofs_dask._calc_eofs_dask_svd(
+            X, rowvar=True)
 
-#         X_rec = np.dot(eofs, pcs)
+        self.assertTrue(eofs.shape == (n_features, n_features - 1))
+        self.assertTrue(pcs.shape == (n_features - 1, n_samples))
 
-#         nonmiss_mask = ~np.isnan(X_rec)
-#         self.assertTrue(np.all(np.isnan(X) == np.isnan(X_rec)))
-#         self.assertTrue(np.allclose(X_rec[nonmiss_mask], X[nonmiss_mask]))
+        self.assertTrue(np.all(np.isnan(eofs[5])))
 
-#     def test_standard_eof_reconstruction_2d_svd_missing_colvar(self):
-#         random_seed = 0
-#         rng = np.random.RandomState(seed=random_seed)
+        X_rec = da.matmul(eofs, pcs)
 
-#         n_samples = 110
-#         n_features = 6
+        nonmiss_mask = ~da.isnan(X_rec)
+        self.assertTrue(da.all(da.isnan(X) == da.isnan(X_rec)))
+        self.assertTrue(da.allclose(X_rec[nonmiss_mask], X[nonmiss_mask]))
 
-#         X = _random_anomalies((n_samples, n_features), random_state=rng,
-#                               rowvar=False)
+    def test_standard_eof_reconstruction_2d_svd_missing_colvar(self):
+        random_seed = 0
+        rng = np.random.RandomState(seed=random_seed)
 
-#         X[60, :] = np.NaN
+        n_samples = 110
+        n_features = 6
 
-#         with self.assertRaises(ValueError):
-#             eofs_default._calc_eofs_default_svd(X, rowvar=False)
+        X = _random_anomalies((n_samples, n_features), random_state=rng,
+                              rowvar=False)
 
-#         X = _random_anomalies((n_samples, n_features), random_state=rng,
-#                               rowvar=False)
+        X[60, :] = np.NaN
 
-#         X[:, 0] = np.NaN
-#         X[:, 4] = np.NaN
+        X = da.from_array(X)
 
-#         eofs, pcs, ev, evr, _ = eofs_default._calc_eofs_default_svd(
-#             X, rowvar=False)
+        with self.assertRaises(ValueError):
+            eofs_dask._calc_eofs_dask_svd(X, rowvar=False)
 
-#         self.assertTrue(eofs.shape == (n_features - 2, n_features))
-#         self.assertTrue(pcs.shape == (n_samples, n_features - 2))
+        X = _random_anomalies((n_samples, n_features), random_state=rng,
+                              rowvar=False)
 
-#         self.assertTrue(np.all(np.isnan(eofs[:, 0])))
-#         self.assertTrue(np.all(np.isnan(eofs[:, 4])))
+        X[:, 0] = np.NaN
+        X[:, 4] = np.NaN
 
-#         X_rec = np.dot(pcs, eofs)
+        X = da.from_array(X)
 
-#         nonmiss_mask = ~np.isnan(X_rec)
-#         self.assertTrue(np.all(np.isnan(X) == np.isnan(X_rec)))
-#         self.assertTrue(np.allclose(X_rec[nonmiss_mask], X[nonmiss_mask]))
+        eofs, pcs, ev, evr, _ = eofs_dask._calc_eofs_dask_svd(
+            X, rowvar=False)
+
+        self.assertTrue(eofs.shape == (n_features - 2, n_features))
+        self.assertTrue(pcs.shape == (n_samples, n_features - 2))
+
+        self.assertTrue(da.all(da.isnan(eofs[:, 0])))
+        self.assertTrue(da.all(da.isnan(eofs[:, 4])))
+
+        X_rec = da.matmul(pcs, eofs)
+
+        nonmiss_mask = ~da.isnan(X_rec)
+        self.assertTrue(da.all(da.isnan(X) == da.isnan(X_rec)))
+        self.assertTrue(da.allclose(X_rec[nonmiss_mask], X[nonmiss_mask]))
 
 #     def test_standard_eof_reconstruction_2d_cov_missing_rowvar(self):
 #         random_seed = 0
@@ -1762,111 +1777,115 @@ class TestDaskBackendHelpers(unittest.TestCase):
 #         self.assertTrue(np.allclose(np.abs(eofs_svd), np.abs(eofs_cov)))
 #         self.assertTrue(np.allclose(np.abs(pcs_svd), np.abs(pcs_cov)))
 
-#     def test_standard_eofs_2d_svd_no_missing_normalization_rowvar(self):
-#         random_seed = 0
-#         rng = np.random.RandomState(seed=random_seed)
+    def test_standard_eofs_2d_svd_no_missing_normalization_rowvar(self):
+        random_seed = 0
+        rng = np.random.RandomState(seed=random_seed)
 
-#         n_samples = 431
-#         n_features = 45
-#         n_components = 34
+        n_samples = 431
+        n_features = 45
+        n_components = 34
 
-#         X = _random_anomalies((n_features, n_samples), random_state=rng,
-#                               rowvar=True)
+        X = da.from_array(_random_anomalies(
+            (n_features, n_samples), random_state=rng,
+            rowvar=True))
 
-#         eofs, pcs, ev, evr, _ = eofs_default._calc_eofs_default_svd(
-#             X, n_components=n_components, rowvar=True)
+        eofs, pcs, ev, evr, _ = eofs_dask._calc_eofs_dask_svd(
+            X, n_components=n_components, rowvar=True)
 
-#         eofs_cov = np.dot(eofs.T, eofs)
-#         eofs_var = np.diag(eofs_cov)
+        eofs_cov = da.matmul(da.transpose(eofs), eofs).compute()
+        eofs_var = da.diag(eofs_cov).compute()
 
-#         self.assertTrue(np.allclose(eofs_var, 1))
-#         for i in range(n_components):
-#             for j in range(n_components):
-#                 if i != j:
-#                     self.assertTrue(np.allclose(eofs_cov[i, j], 0))
+        self.assertTrue(da.allclose(eofs_var, 1))
+        for i in range(n_components):
+            for j in range(n_components):
+                if i != j:
+                    self.assertTrue(da.allclose(eofs_cov[i, j], 0))
 
-#     def test_standard_eofs_2d_svd_no_missing_normalization_colvar(self):
-#         random_seed = 0
-#         rng = np.random.RandomState(seed=random_seed)
+    def test_standard_eofs_2d_svd_no_missing_normalization_colvar(self):
+        random_seed = 0
+        rng = np.random.RandomState(seed=random_seed)
 
-#         n_samples = 218
-#         n_features = 23
-#         n_components = 5
+        n_samples = 218
+        n_features = 23
+        n_components = 5
 
-#         X = _random_anomalies((n_samples, n_features), random_state=rng,
-#                               rowvar=False)
+        X = da.from_array(_random_anomalies(
+            (n_samples, n_features), random_state=rng,
+            rowvar=False))
 
-#         eofs, pcs, ev, evr, _ = eofs_default._calc_eofs_default_svd(
-#             X, n_components=n_components, rowvar=False)
+        eofs, pcs, ev, evr, _ = eofs_dask._calc_eofs_dask_svd(
+            X, n_components=n_components, rowvar=False)
 
-#         eofs_cov = np.dot(eofs, eofs.T)
-#         eofs_var = np.diag(eofs_cov)
+        eofs_cov = da.matmul(eofs, da.transpose(eofs)).compute()
+        eofs_var = da.diag(eofs_cov).compute()
 
-#         self.assertTrue(np.allclose(eofs_var, 1))
-#         for i in range(n_components):
-#             for j in range(n_components):
-#                 if i != j:
-#                     self.assertTrue(np.allclose(eofs_cov[i, j], 0))
+        self.assertTrue(da.allclose(eofs_var, 1))
+        for i in range(n_components):
+            for j in range(n_components):
+                if i != j:
+                    self.assertTrue(da.allclose(eofs_cov[i, j], 0))
 
-#     def test_standard_eofs_2d_svd_no_missing_pcs_normalization_rowvar(self):
-#         random_seed = 0
-#         rng = np.random.RandomState(seed=random_seed)
+    def test_standard_eofs_2d_svd_no_missing_pcs_normalization_rowvar(self):
+        random_seed = 0
+        rng = np.random.RandomState(seed=random_seed)
 
-#         n_samples = 183
-#         n_features = 12
-#         n_components = 9
+        n_samples = 183
+        n_features = 12
+        n_components = 9
 
-#         X = _random_anomalies((n_features, n_samples), random_state=rng,
-#                               rowvar=True)
+        X = da.from_array(_random_anomalies(
+            (n_features, n_samples), random_state=rng,
+            rowvar=True))
 
-#         eofs, pcs, ev, evr, _ = eofs_default._calc_eofs_default_svd(
-#             X, n_components=n_components, rowvar=True, normalize_pcs=True)
+        eofs, pcs, ev, evr, _ = eofs_dask._calc_eofs_dask_svd(
+            X, n_components=n_components, rowvar=True, normalize_pcs=True)
 
-#         eofs_cov = np.dot(eofs.T, eofs)
-#         for i in range(n_components):
-#             for j in range(n_components):
-#                 if i != j:
-#                     self.assertTrue(np.allclose(eofs_cov[i, j], 0))
+        eofs_cov = da.matmul(da.transpose(eofs), eofs).compute()
+        for i in range(n_components):
+            for j in range(n_components):
+                if i != j:
+                    self.assertTrue(da.allclose(eofs_cov[i, j], 0))
 
-#         pcs_var = np.var(pcs, axis=1, ddof=1)
-#         pcs_cov = np.dot(pcs, pcs.T) / (n_samples - 1)
+        pcs_var = da.var(pcs, axis=1, ddof=1).compute()
+        pcs_cov = da.matmul(pcs, da.transpose(pcs)).compute() / (n_samples - 1)
 
-#         self.assertTrue(np.allclose(pcs_var, 1))
-#         self.assertTrue(np.allclose(np.diag(pcs_cov), 1))
-#         for i in range(n_components):
-#             for j in range(n_components):
-#                 if i != j:
-#                     self.assertTrue(np.allclose(pcs_cov[i, j], 0))
+        self.assertTrue(da.allclose(pcs_var, 1))
+        self.assertTrue(da.allclose(da.diag(pcs_cov), 1))
+        for i in range(n_components):
+            for j in range(n_components):
+                if i != j:
+                    self.assertTrue(da.allclose(pcs_cov[i, j], 0))
 
-#     def test_standard_eofs_2d_svd_no_missing_pcs_normalization_colvar(self):
-#         random_seed = 0
-#         rng = np.random.RandomState(seed=random_seed)
+    def test_standard_eofs_2d_svd_no_missing_pcs_normalization_colvar(self):
+        random_seed = 0
+        rng = np.random.RandomState(seed=random_seed)
 
-#         n_samples = 103
-#         n_features = 68
-#         n_components = 24
+        n_samples = 103
+        n_features = 68
+        n_components = 24
 
-#         X = _random_anomalies((n_samples, n_features), random_state=rng,
-#                               rowvar=False)
+        X = da.from_array(_random_anomalies(
+            (n_samples, n_features), random_state=rng,
+            rowvar=False))
 
-#         eofs, pcs, ev, evr, _ = eofs_default._calc_eofs_default_svd(
-#             X, n_components=n_components, rowvar=False, normalize_pcs=True)
+        eofs, pcs, ev, evr, _ = eofs_dask._calc_eofs_dask_svd(
+            X, n_components=n_components, rowvar=False, normalize_pcs=True)
 
-#         eofs_cov = np.dot(eofs, eofs.T)
-#         for i in range(n_components):
-#             for j in range(n_components):
-#                 if i != j:
-#                     self.assertTrue(np.allclose(eofs_cov[i, j], 0))
+        eofs_cov = da.matmul(eofs, da.transpose(eofs)).compute()
+        for i in range(n_components):
+            for j in range(n_components):
+                if i != j:
+                    self.assertTrue(da.allclose(eofs_cov[i, j], 0))
 
-#         pcs_var = np.var(pcs, axis=0, ddof=1)
-#         pcs_cov = np.dot(pcs.T, pcs) / (n_samples - 1)
+        pcs_var = da.var(pcs, axis=0, ddof=1).compute()
+        pcs_cov = da.matmul(da.transpose(pcs), pcs).compute() / (n_samples - 1)
 
-#         self.assertTrue(np.allclose(pcs_var, 1))
-#         self.assertTrue(np.allclose(np.diag(pcs_cov), 1))
-#         for i in range(n_components):
-#             for j in range(n_components):
-#                 if i != j:
-#                     self.assertTrue(np.allclose(pcs_cov[i, j], 0))
+        self.assertTrue(da.allclose(pcs_var, 1))
+        self.assertTrue(da.allclose(da.diag(pcs_cov), 1))
+        for i in range(n_components):
+            for j in range(n_components):
+                if i != j:
+                    self.assertTrue(da.allclose(pcs_cov[i, j], 0))
 
 #     def test_standard_eofs_2d_cov_no_missing_normalization_rowvar(self):
 #         random_seed = 0
@@ -1974,9 +1993,6 @@ class TestDaskBackendHelpers(unittest.TestCase):
 #                 if i != j:
 #                     self.assertTrue(np.allclose(pcs_cov[i, j], 0))
 
-# class TestStandardEOFsDefaultBackend(unittest.TestCase):
-
-#     def test_standard_eof_reconstruction_2d_rowvar(self):
 
 # class TestStandardEOFs(unittest.TestCase):
 
