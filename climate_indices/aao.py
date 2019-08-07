@@ -99,7 +99,7 @@ def calculate_annual_eof(anom_data, aao_mode=DEFAULT_AAO_MODE,
                          time_field=DEFAULT_TIME_FIELD,
                          lat_weights='scos', lat_field=DEFAULT_LAT_FIELD,
                          hgt_field=DEFAULT_HGT_FIELD,
-                         n_eofs=N_EOFS, random_state=None):
+                         n_eofs=N_EOFS, random_state=None, **kwargs):
     valid_data = anom_data.where(
         (anom_data[lat_field] >= MIN_LATITUDE) &
         (anom_data[lat_field] <= MAX_LATITUDE), drop=True)
@@ -111,7 +111,7 @@ def calculate_annual_eof(anom_data, aao_mode=DEFAULT_AAO_MODE,
     weighted_data = weighted_data.transpose(*[d for d in valid_data.dims])
 
     eofs, pcs, ev, evr = calc_eofs(
-        weighted_data.values, n_components=n_eofs, rowvar=False)
+        weighted_data.values, n_components=n_eofs, rowvar=False, **kwargs)
 
     eofs_data = eofs[aao_mode][np.newaxis, ...]
     eofs_dims = ([EOF_DIM_NAME] +
