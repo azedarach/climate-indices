@@ -105,15 +105,15 @@ def calculate_annual_eof(anom_data, aao_mode=DEFAULT_AAO_MODE,
         (anom_data[lat_field] <= MAX_LATITUDE), drop=True)
 
     lat_data = valid_data[lat_field]
-
     weights = _get_lat_weights(lat_data, lat_weights=lat_weights)
-    weights = xr.broadcast(valid_data.isel({time_field: 0}), weights)[1]
 
-    eofs_result = calc_eofs(
-        valid_data.values, weights=weights.values, n_eofs=n_eofs,
-        random_state=random_state)
+    weighted_data = weights * valid_data
+    weighted_data = weighted_data.transpose(*[d for d in valid_data.dims])
 
-    eofs_data = eofs_result['eofs'][aao_mode][np.newaxis, ...]
+    eofs, pcs, ev, evr = calc_eofs(
+        weighted_data.values, n_components=n_eofs, rowvar=False)
+
+    eofs_data = eofs[aao_mode][np.newaxis, ...]
     eofs_dims = ([EOF_DIM_NAME] +
                  [d for d in valid_data.dims if d != time_field])
     eofs_coords = valid_data.coords.to_dataset().drop(
@@ -124,20 +124,18 @@ def calculate_annual_eof(anom_data, aao_mode=DEFAULT_AAO_MODE,
     eofs_da = xr.DataArray(eofs_data, dims=eofs_dims,
                            coords=eofs_coords.coords)
 
-    pcs_data = eofs_result['pcs'][:, aao_mode][:, np.newaxis]
+    pcs_data = pcs[:, aao_mode][:, np.newaxis]
     pcs_dims = [time_field, EOF_DIM_NAME]
     pcs_coords = {time_field: valid_data[time_field].values,
                   EOF_DIM_NAME: np.arange(1)}
     pcs_da = xr.DataArray(pcs_data, dims=pcs_dims, coords=pcs_coords)
 
-    ev = eofs_result['explained_variance'][aao_mode]
-    evr = eofs_result['explained_variance_ratio'][aao_mode]
-    sv = eofs_result['singular_values'][aao_mode]
+    ev = ev[aao_mode]
+    evr = evr[aao_mode]
 
     annual_eofs = {
         'explained_variance': ev,
         'explained_variance_ratio': evr,
-        'singular_values': sv,
         'eofs': eofs_da,
         'pcs': pcs_da}
 

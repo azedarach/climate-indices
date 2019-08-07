@@ -210,7 +210,7 @@ def _calc_eofs_default_svd(X, n_components=None, rowvar=True, center=True,
     fact = n_samples * 1. - ddof
 
     if n_components is None:
-        n_components = n_valid_features
+        n_components = min(n_samples, n_valid_features)
 
     u, s, vt = _calc_svd_default(valid_data, k=n_components)
 
