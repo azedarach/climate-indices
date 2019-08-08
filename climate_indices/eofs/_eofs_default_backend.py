@@ -433,12 +433,36 @@ def _calc_eofs_default(X, n_components=None, rowvar=True, method=None,
         else:
             method = 'cov'
 
+    if 'center' in kwargs:
+        center = kwargs['center']
+    else:
+        center = True
+
+    if 'bias' in kwargs:
+        bias = kwargs['bias']
+    else:
+        bias = False
+
+    if 'ddof' in kwargs:
+        ddof = kwargs['ddof']
+    else:
+        ddof = None
+
+    if 'normalize_pcs' in kwargs:
+        normalize_pcs = kwargs['normalize_pcs']
+    else:
+        normalize_pcs = False
+
     if method == 'svd':
         eofs_2d, pcs, ev, evr, _ = _calc_eofs_default_svd(
-            data_2d, n_components=n_components, rowvar=rowvar, **kwargs)
+            data_2d, n_components=n_components, rowvar=rowvar,
+            center=center, bias=bias, ddof=ddof,
+            normalize_pcs=normalize_pcs)
     elif method == 'cov':
         eofs_2d, pcs, ev, evr = _calc_eofs_default_cov(
-            data_2d, n_components=n_components, rowvar=rowvar, **kwargs)
+            data_2d, n_components=n_components, rowvar=rowvar,
+            center=center, bias=bias, ddof=ddof,
+            normalize_pcs=normalize_pcs)
     else:
         raise ValueError(
             "invalid method parameter '%r'" % method)
