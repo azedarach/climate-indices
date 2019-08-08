@@ -119,14 +119,14 @@ def calculate_annual_eofs(anom_data,
     eofs_coords = valid_data.coords.to_dataset().drop(
         time_field).reset_coords(drop=True)
     eofs_coords = eofs_coords.expand_dims(EOF_DIM_NAME, axis=0)
-    eofs_coords.coords[EOF_DIM_NAME] = (EOF_DIM_NAME, np.arange(1))
+    eofs_coords.coords[EOF_DIM_NAME] = (EOF_DIM_NAME, np.arange(n_eofs))
 
     eofs_da = xr.DataArray(eofs, dims=eofs_dims,
                            coords=eofs_coords.coords)
 
     pcs_dims = [time_field, EOF_DIM_NAME]
     pcs_coords = {time_field: valid_data[time_field].values,
-                  EOF_DIM_NAME: np.arange(1)}
+                  EOF_DIM_NAME: np.arange(n_eofs)}
     pcs_da = xr.DataArray(pcs, dims=pcs_dims, coords=pcs_coords)
 
     ev_dims = [EOF_DIM_NAME]
