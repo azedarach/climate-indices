@@ -1,5 +1,6 @@
 from ._eofs_dask_backend import _calc_eofs_dask
-from ._eofs_default_backend import _calc_eofs_default
+from ._eofs_default_backend import (_calc_eofs_default,
+                                    _varimax_rotation_default)
 
 try:
     import dask.array
@@ -25,7 +26,7 @@ def calc_eofs(X, backend=None, **kwargs):
             "invalid backend parameter '%r'" % backend)
 
 
-def varimax_rotation(pcs, eofs, backend=None, **kwargs):
+def varimax_rotation(eofs, pcs, backend=None, **kwargs):
     if backend is None:
         backend = 'default'
 

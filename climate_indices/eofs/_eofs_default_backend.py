@@ -363,11 +363,11 @@ def _calc_eofs_default(X, n_components=None, rowvar=True, method=None,
 
     Parameters
     ----------
-    X : array-like, shape (n_variables, n_samples) or (n_samples, n_variables)
+    X : array-like,
         Data array containing data to analyse. If rowvar=True (default),
-        each row of X is taken to correspond to a separate variable.
-        Otherwise, the columns of X are taken to correspond to separate
-        variables.
+        the last dimension of X is taken to correspond to distinct
+        observations. Otherwise, the first dimension is taken to label
+        the separate observations.
 
     n_components : integer or None
         If an integer, the number of principal components to retain.
@@ -448,228 +448,217 @@ def _calc_eofs_default(X, n_components=None, rowvar=True, method=None,
     return eofs, pcs, ev, evr
 
 
-# def _bsv_orthomax_rotation(A, T0=None, gamma=1.0, tol=1e-6, max_iter=500):
-#     """Return optimal rotation found by BSV algorithm.
+def _bsv_orthomax_rotation(A, T0=None, gamma=1.0, tol=1e-6, max_iter=500):
+    """Return optimal rotation found by BSV algorithm.
 
-#     Given an initial set row-wise orthonormal matrix A of dimension
-#     k x p, p >= k, the orthomax family of criteria seek an
-#     orthogonal matrix T that maximizes the objective function
+    Given an initial set row-wise orthonormal matrix A of dimension
+    k x p, p >= k, the orthomax family of criteria seek an
+    orthogonal matrix T that maximizes the objective function
 
-#         Q(Lambda) = (1 / 4) Tr[(L ^ 2)^T (L^2 - gamma * \bar{L^2})]
+        Q(Lambda) = (1 / 4) Tr[(L ^ 2)^T (L^2 - gamma * \bar{L^2})]
 
-#     where L = A^T * T, L^2 denotes the element-wise square
-#     of L, and \bar{L^2} denotes the result of replacing each
-#     element of L^2 by the mean of its corresponding column. The
-#     parameter gamma defines the particular objective function to be
-#     maximized; for gamma = 1, the procedure corresponds to the
-#     standard VARIMAX rotation.
+    where L = A^T * T, L^2 denotes the element-wise square
+    of L, and \bar{L^2} denotes the result of replacing each
+    element of L^2 by the mean of its corresponding column. The
+    parameter gamma defines the particular objective function to be
+    maximized; for gamma = 1, the procedure corresponds to the
+    standard VARIMAX rotation.
 
-#     Parameters
-#     ----------
-#     A : array-like, shape (n_components, n_features)
-#         The matrix to be rotated.
+    Parameters
+    ----------
+    A : array-like, shape (n_components, n_features)
+        The matrix to be rotated.
 
-#     T0 : None or array-like, shape (n_components, n_components)
-#         If given, an initial guess for the rotation matrix T.
+    T0 : None or array-like, shape (n_components, n_components)
+        If given, an initial guess for the rotation matrix T.
 
-#     gamma : float, default: 1.0
-#         Objective function parameter.
+    gamma : float, default: 1.0
+        Objective function parameter.
 
-#     tol : float, default: 1e-6
-#         Tolerance of the stopping condition.
+    tol : float, default: 1e-6
+        Tolerance of the stopping condition.
 
-#     max_iter : integer, default: 500
-#         Maximum number of iterations before stopping.
+    max_iter : integer, default: 500
+        Maximum number of iterations before stopping.
 
-#     Returns
-#     -------
-#     T : array-like, shape (n_components, n_components)
-#         Approximation to the optimal rotation.
+    Returns
+    -------
+    T : array-like, shape (n_components, n_components)
+        Approximation to the optimal rotation.
 
-#     n_iter : integer
-#         The actual number of iterations.
+    n_iter : integer
+        The actual number of iterations.
 
-#     References
-#     ----------
-#     R. I. Jennrich, "A simple general procedure for orthogonal rotation",
-#     Psychometrika 66, 2 (2001), 289-306
-#     """
-#     n_components, n_features = A.shape
+    References
+    ----------
+    R. I. Jennrich, "A simple general procedure for orthogonal rotation",
+    Psychometrika 66, 2 (2001), 289-306
+    """
+    n_components, n_features = A.shape
 
-#     if T0 is None:
-#         T = np.eye(n_components, dtype=A.dtype)
-#     else:
-#         _check_array_shape(
-#             T0, (n_components, n_components), '_bsv_orthomax_rotation')
-#         T = T0.copy()
+    if T0 is None:
+        T = np.eye(n_components, dtype=A.dtype)
+    else:
+        _check_array_shape(
+            T0, (n_components, n_components), '_bsv_orthomax_rotation')
+        T = T0.copy()
 
-#     delta = 0
-#     for n_iter in range(max_iter):
-#         delta_old = delta
+    delta = 0
+    for n_iter in range(max_iter):
+        delta_old = delta
 
-#         Li = np.dot(A.T, T)
+        Li = np.dot(A.T, T)
 
-#         grad = Li ** 3 - gamma * np.dot(Li, np.diag(np.mean(Li ** 2, axis=0)))
-#         G = np.dot(A, grad)
+        grad = Li ** 3 - gamma * np.dot(Li, np.diag(np.mean(Li ** 2, axis=0)))
+        G = np.dot(A, grad)
 
-#         u, s, vt = np.linalg.svd(G)
+        u, s, vt = np.linalg.svd(G)
 
-#         T = np.dot(u, vt)
+        T = np.dot(u, vt)
 
-#         delta = np.sum(s)
-#         if delta < delta_old * (1 + tol):
-#             break
+        delta = np.sum(s)
+        if delta < delta_old * (1 + tol):
+            break
 
-#     if n_iter == max_iter and tol > 0:
-#         warnings.warn('Maximum number of iterations %d reached.' % max_iter,
-#                       warnings.UserWarning)
+    if n_iter == max_iter and tol > 0:
+        warnings.warn('Maximum number of iterations %d reached.' % max_iter,
+                      warnings.UserWarning)
 
-#     return T, n_iter
-
-
-# def _unit_normalize_eofs(pcs, eofs, rowvar=True):
-#     if rowvar:
-#         norms = np.linalg.norm(eofs, axis=0)
-#         return pcs * norms[:, np.newaxis], eofs / norms[np.newaxis, :]
-#     else:
-#         norms = np.linalg.norm(eofs, axis=1)
-#         return pcs * norms[np.newaxis, :], eofs / norms[:, np.newaxis]
+    return T, n_iter
 
 
-# def _fix_sign_convention(pcs, eofs, singular_values, rowvar=True):
-#     axis = 1 - int(bool(rowvar))
-#     abs_min = np.abs(np.min(eofs, axis=axis))
-#     abs_max = np.abs(np.max(eofs, axis=axis))
-
-#     flip_signs = abs_min > abs_max
-
-#     if rowvar:
-#         eofs[:, flip_signs] *= -1
-#         pcs[flip_signs] *= -1
-#     else:
-#         eofs[flip_signs] *= -1
-#         pcs[:, flip_signs] *= -1
-
-#     sv = singular_values.copy()
-#     sv[:, flip_signs] *= -1
-#     sv[flip_signs, :] *= -1
-
-#     return pcs, eofs, sv
+def _unit_normalize_eofs(pcs, eofs, rowvar=True):
+    if rowvar:
+        norms = np.linalg.norm(eofs, axis=0)
+        return pcs * norms[:, np.newaxis], eofs / norms[np.newaxis, :]
+    else:
+        norms = np.linalg.norm(eofs, axis=1)
+        return pcs * norms[np.newaxis, :], eofs / norms[:, np.newaxis]
 
 
-# def _reorder_eofs(pcs, eofs, explained_variance, singular_values,
-#                   rowvar=True):
-#     n_components = np.size(explained_variance)
-#     sort_order = np.flip(np.argsort(explained_variance))
+def _fix_sign_convention(pcs, eofs, rowvar=True):
+    axis = 1 - int(bool(rowvar))
+    abs_min = np.abs(np.min(eofs, axis=axis))
+    abs_max = np.abs(np.max(eofs, axis=axis))
 
-#     perm_inv = np.zeros((n_components, n_components))
-#     for i in range(n_components):
-#         perm_inv[i, sort_order[i]] = 1
+    flip_signs = abs_min > abs_max
 
-#     sv = np.dot(perm_inv, np.dot(singular_values, perm_inv.T))
+    if rowvar:
+        eofs[:, flip_signs] *= -1
+        pcs[flip_signs] *= -1
+    else:
+        eofs[flip_signs] *= -1
+        pcs[:, flip_signs] *= -1
 
-#     if rowvar:
-#         return (pcs[sort_order], eofs[:, sort_order],
-#                 explained_variance[sort_order], sv)
-#     else:
-#         return (pcs[:, sort_order], eofs[sort_order],
-#                 explained_variance[sort_order],
-#                 sv)
+    return pcs, eofs
 
 
-# def _varimax_rotation_2d(pcs_2d, eofs_2d, explained_variance,
-#                          explained_variance_ratio,
-#                          singular_values, rowvar=True,
-#                          scale_eofs=True, kaiser_normalize=True,
-#                          unit_normalize=False, reorder_eofs=True,
-#                          tol=1e-6, max_iter=500):
-#     if rowvar:
-#         n_features, n_components = eofs_2d.shape
-#     else:
-#         n_components, n_features = eofs_2d.shape
+def _reorder_eofs(pcs, eofs, explained_variance, rowvar=True):
+    n_components = np.size(explained_variance)
+    sort_order = np.flip(np.argsort(explained_variance))
 
-#     _check_array_shape(explained_variance, (n_components,),
-#                        '_varimax_rotation_2d')
-#     _check_array_shape(explained_variance_ratio, (n_components,),
-#                        '_varimax_rotation_2d')
-#     _check_array_shape(singular_values, (n_components,),
-#                        '_varimax_rotation_2d')
+    perm_inv = np.zeros((n_components, n_components))
+    for i in range(n_components):
+        perm_inv[i, sort_order[i]] = 1
 
-#     pcs = pcs_2d.copy()
-#     eofs = eofs_2d.copy()
-
-#     if scale_eofs:
-#         eofs *= np.sqrt(explained_variance[:, np.newaxis])
-
-#     if kaiser_normalize:
-#         normalization = np.sqrt((eofs ** 2).sum(axis=0))
-#         normalization[normalization == 0] = 1
-#         eofs /= normalization
-
-#     if rowvar:
-#         rotT, n_iter = _bsv_orthomax_rotation(
-#             eofs.T, gamma=VARIMAX_GAMMA, tol=tol, max_iter=max_iter)
-#     else:
-#         rot, n_iter = _bsv_orthomax_rotation(
-#             eofs, gamma=VARIMAX_GAMMA, tol=tol, max_iter=max_iter)
-
-#     rpcs = np.dot(pcs, rot)
-#     reofs = np.dot(rot.T, eofs)
-#     rsv = np.dot(rot.T, np.dot(np.diag(singular_values), rot))
-
-#     if kaiser_normalize:
-#         reofs *= normalization
-
-#     # @todo since singular values already absorbed into PC scaling,
-#     # may be incorrect to also apply sign changes to singular values
-#     # as here
-#     rpcs, reofs, rsv = _fix_sign_convention(rpcs, reofs, rsv)
-
-#     rev = np.sum(reofs ** 2, axis=1)
-
-#     if reorder_eofs:
-#         rpcs, reofs, rev, rsv = _reorder_eofs(rpcs, reofs, rev, rsv)
-
-#     if unit_normalize:
-#         rpcs, reofs = _unit_normalize_eofs(rpcs, reofs)
-
-#     total_variance = explained_variance[0] / explained_variance_ratio[0]
-#     revr = rev / total_variance
-
-#     results = {'pcs': rpcs, 'eofs': reofs,
-#                'explained_variance': rev,
-#                'explained_variance_ratio': revr,
-#                'singular_values': rsv,
-#                'n_iter': n_iter}
-
-#     return results
+    if rowvar:
+        return (pcs[sort_order], eofs[:, sort_order],
+                explained_variance[sort_order])
+    else:
+        return (pcs[:, sort_order], eofs[sort_order],
+                explained_variance[sort_order])
 
 
-# def varimax_rotation(eof_results, scale_eofs=True,
-#                      kaiser_normalize=True, unit_normalize=False,
-#                      reorder_eofs=True,
-#                      tol=1e-6, max_iter=500):
+def _varimax_rotation_2d(eofs_2d, pcs_2d, ev=None,
+                         evr=None,
+                         rowvar=False,
+                         scale_eofs=True, kaiser_normalize=True,
+                         unit_normalize=False, reorder_eofs=True,
+                         tol=1e-6, max_iter=500):
+    if rowvar:
+        raise NotImplementedError('rowvar=True not implemented')
 
-#     pcs = eof_results['pcs']
-#     eofs = eof_results['eofs']
-#     ev = eof_results['explained_variance']
-#     evr = eof_results['explained_variance_ratio']
-#     sv = eof_results['singular_values']
+    if rowvar:
+        n_features, n_components = eofs_2d.shape
+    else:
+        n_components, n_features = eofs_2d.shape
 
-#     if eofs.ndim < 2:
-#         raise ValueError(
-#             'Matrix with at least two dimensions expected '
-#             '(got eofs.ndim = %d)' % eofs.ndim)
+    if ev is not None:
+        _check_array_shape(ev, (n_components,),
+                           '_varimax_rotation_2d')
+    if evr is not None:
+        _check_array_shape(evr, (n_components,),
+                           '_varimax_rotation_2d')
 
-#     original_shape = eofs.shape[1:]
-#     eofs_2d = _to_2d_array(eofs)
+    pcs = pcs_2d.copy()
+    eofs = eofs_2d.copy()
 
-#     results = _varimax_rotation_2d(
-#         pcs, eofs_2d, ev, evr, sv,
-#         scale_eofs=scale_eofs, kaiser_normalize=kaiser_normalize,
-#         unit_normalize=unit_normalize, reorder_eofs=reorder_eofs,
-#         tol=tol, max_iter=max_iter)
+    if scale_eofs and ev is None:
+        warnings.warn('scale_eofs=True but explained variance not given',
+                      UserWarning)
+    elif scale_eofs and ev is not None:
+        eofs *= np.sqrt(ev[:, np.newaxis])
 
-#     results['eofs'] = _to_nd_array(results['eofs'], original_shape)
+    if kaiser_normalize:
+        normalization = np.sqrt((eofs ** 2).sum(axis=0))
+        normalization[normalization == 0] = 1
+        eofs /= normalization
 
-#     return results
+    if rowvar:
+        rotT, n_iter = _bsv_orthomax_rotation(
+            eofs.T, gamma=VARIMAX_GAMMA, tol=tol, max_iter=max_iter)
+    else:
+        rot, n_iter = _bsv_orthomax_rotation(
+            eofs, gamma=VARIMAX_GAMMA, tol=tol, max_iter=max_iter)
+
+    rpcs = np.dot(pcs, rot)
+    reofs = np.dot(rot.T, eofs)
+
+    if kaiser_normalize:
+        reofs *= normalization
+
+    rpcs, reofs = _fix_sign_convention(rpcs, reofs)
+
+    rev = np.sum(reofs ** 2, axis=1)
+
+    if reorder_eofs:
+        rpcs, reofs, rev = _reorder_eofs(rpcs, reofs, rev)
+
+    if unit_normalize:
+        rpcs, reofs = _unit_normalize_eofs(rpcs, reofs)
+
+    if ev is not None and evr is not None:
+        total_variance = ev[0] / evr[0]
+        revr = rev / total_variance
+    else:
+        revr = None
+
+    return reofs, rpcs, rev, revr, n_iter
+
+
+def _varimax_rotation_default(eofs, pcs, ev=None,
+                              evr=None, scale_eofs=True,
+                              kaiser_normalize=True, unit_normalize=False,
+                              reorder_eofs=True,
+                              tol=1e-6, max_iter=500, rowvar=False):
+
+    if rowvar:
+        raise NotImplementedError('rowvar=True not implemented')
+
+    if eofs.ndim < 2:
+        raise ValueError(
+            'Matrix with at least two dimensions expected '
+            '(got eofs.ndim = %d)' % eofs.ndim)
+
+    original_shape = eofs.shape[1:]
+    eofs_2d = _to_2d_array(eofs, rowvar=rowvar)
+
+    reofs, rpcs, rev, revr, n_iter = _varimax_rotation_2d(
+        eofs_2d, pcs, ev=ev, evr=evr,
+        scale_eofs=scale_eofs, kaiser_normalize=kaiser_normalize,
+        unit_normalize=unit_normalize, reorder_eofs=reorder_eofs,
+        tol=tol, max_iter=max_iter)
+
+    reofs = _to_nd_array(reofs, original_shape, rowvar=rowvar)
+
+    return reofs, rpcs, rev, revr, n_iter
