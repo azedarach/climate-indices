@@ -374,7 +374,7 @@ def _calc_eofs_dask(X, n_components=None, rowvar=True, method=None,
 
     if method == 'svd':
         eofs_2d, pcs, ev, evr, _ = _calc_eofs_dask_svd(
-            data_2d, rowvar=rowvar, **kwargs)
+            data_2d, n_components=n_components, rowvar=rowvar, **kwargs)
     else:
         raise ValueError(
             "invalid method parameter '%r'" % method)
