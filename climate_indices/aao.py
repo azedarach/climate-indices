@@ -166,7 +166,8 @@ def calculate_aao_pc_index(anom_data, eofs_data,
                            normalization=1):
     n_eofs = 1
 
-    eof_data = eofs_data.sel({EOF_DIM_NAME: aao_mode})
+    eof_data = eofs_data.where(eofs_data[EOF_DIM_NAME] == aao_mode,
+                               drop=True)
 
     pos_phase_pattern = _fix_phase(eof_data, time_field=time_field,
                                    lat_field=lat_field)
