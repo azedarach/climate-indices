@@ -31,7 +31,7 @@ def varimax_rotation(eofs, pcs, backend=None, **kwargs):
         backend = 'default'
 
     if backend == 'default':
-        return _varimax_rotation_default(pcs, eofs, **kwargs)
+        return _varimax_rotation_default(eofs, pcs, **kwargs)
     else:
         raise ValueError(
             "invalid backend parameter '%r'" % backend)
