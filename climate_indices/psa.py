@@ -96,12 +96,11 @@ def calculate_monthly_region_anomalies(hgt_data, climatology=None,
     return anom, climatology
 
 
-def calculate_seasonal_eof(anom_data, season='JJA',
-                           psa_mode=DEFAULT_PSA1_REAL_MODE,
-                           rotate=False, time_field=DEFAULT_TIME_FIELD,
-                           lat_weights='scos', lat_field=DEFAULT_LAT_FIELD,
-                           hgt_field=DEFAULT_HGT_FIELD,
-                           n_eofs=N_EOFS, random_state=None):
+def calculate_seasonal_eofs(anom_data, season='JJA',
+                            rotate=False, time_field=DEFAULT_TIME_FIELD,
+                            lat_weights='scos', lat_field=DEFAULT_LAT_FIELD,
+                            hgt_field=DEFAULT_HGT_FIELD,
+                            n_eofs=N_EOFS, random_state=None, **kwargs):
     """Calculate seasonal EOFs from geopotential height anomaly data.
 
     Parameters
@@ -135,18 +134,18 @@ def calculate_seasonal_eof(anom_data, season='JJA',
         valid_data[time_field].dt.season == season, drop=True)
 
     lat_data = valid_data[lat_field]
-
     weights = _get_lat_weights(lat_data, lat_weights=lat_weights)
-    weights = xr.broadcast(valid_data.isel({time_field: 0}), weights)[1]
 
-    eofs_result = calc_eofs(
-        valid_data.values, weights=weights.values, n_eofs=n_eofs,
-        random_state=random_state)
+    weighted_data = weights * valid_data
+    weighted_data = weighted_data.transpose(*[d for d in valid_data.dims])
+
+    eofs, pcs, ev, evr = calc_eofs(
+        weighted_data.values, n_components=n_eofs, rowvar=False,
+        random_state=random_state, **kwargs)
 
     if rotate:
-        eofs_result = varimax_rotation(eofs_result)
+        eofs, pcs, ev, evr = varimax_rotation(eofs, pcs, ev=ev, evr=evr)
 
-    eofs_data = eofs_result['eofs'][psa_mode][np.newaxis, ...]
     eofs_dims = ([EOF_DIM_NAME] +
                  [d for d in valid_data.dims if d != time_field])
     eofs_coords = valid_data.coords.to_dataset().drop(
@@ -154,23 +153,25 @@ def calculate_seasonal_eof(anom_data, season='JJA',
     eofs_coords = eofs_coords.expand_dims(EOF_DIM_NAME, axis=0)
     eofs_coords.coords[EOF_DIM_NAME] = (EOF_DIM_NAME, np.arange(1))
 
-    eofs_da = xr.DataArray(eofs_data, dims=eofs_dims,
+    eofs_da = xr.DataArray(eofs, dims=eofs_dims,
                            coords=eofs_coords.coords)
 
-    pcs_data = eofs_result['pcs'][:, psa_mode][:, np.newaxis]
     pcs_dims = [time_field, EOF_DIM_NAME]
     pcs_coords = {time_field: valid_data[time_field].values,
                   EOF_DIM_NAME: np.arange(1)}
-    pcs_da = xr.DataArray(pcs_data, dims=pcs_dims, coords=pcs_coords)
+    pcs_da = xr.DataArray(pcs, dims=pcs_dims, coords=pcs_coords)
 
-    ev = eofs_result['explained_variance'][psa_mode]
-    evr = eofs_result['explained_variance_ratio'][psa_mode]
-    sv = eofs_result['singular_values'][psa_mode]
+    ev_dims = [EOF_DIM_NAME]
+    ev_coords = {EOF_DIM_NAME: np.arange(n_eofs)}
+    ev_da = xr.DataArray(ev, dims=ev_dims, coords=ev_coords)
+
+    evr_dims = [EOF_DIM_NAME]
+    evr_coords = {EOF_DIM_NAME: np.arange(n_eofs)}
+    evr_da = xr.DataArray(evr, dims=evr_dims, coords=evr_coords)
 
     seasonal_eofs = {
-        'explained_variance': ev,
-        'explained_variance_ratio': evr,
-        'singular_values': sv,
+        'explained_variance': ev_da,
+        'explained_variance_ratio': evr_da,
         'eofs': eofs_da,
         'pcs': pcs_da}
 
@@ -178,7 +179,7 @@ def calculate_seasonal_eof(anom_data, season='JJA',
 
 
 def calculate_psa1_real_pc_index(anom_data, eofs_data,
-                                 ddof=0,
+                                 psa1_mode=DEFAULT_PSA1_REAL_MODE, ddof=0,
                                  lat_weights='scos',
                                  time_field=DEFAULT_TIME_FIELD,
                                  lat_field=DEFAULT_LAT_FIELD,
@@ -189,9 +190,12 @@ def calculate_psa1_real_pc_index(anom_data, eofs_data,
     if clim_end_year is None:
         clim_end_year = int(anom_data[time_field].dt.year.max())
 
-    n_eofs = eofs_data.shape[0]
+    n_eofs = 1
 
-    pcs = _project_data(anom_data, eofs_data, lat_weights=lat_weights,
+    eof_data = eofs_data.where(eofs_data[EOF_DIM_NAME] == psa1_mode,
+                               drop=True)
+
+    pcs = _project_data(anom_data, eof_data, lat_weights=lat_weights,
                         time_field=time_field, lat_field=lat_field)
 
     pcs_dims = [time_field, EOF_DIM_NAME]
@@ -213,5 +217,5 @@ def calculate_psa1_real_pc_index(anom_data, eofs_data,
 
 __all__ = ['calculate_daily_region_anomalies',
            'calculate_monthly_region_anomalies',
-           'calculate_seasonal_eof',
+           'calculate_seasonal_eofs',
            'calculate_psa1_real_pc_index']
