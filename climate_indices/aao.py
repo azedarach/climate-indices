@@ -111,7 +111,8 @@ def calculate_annual_eofs(anom_data,
     weighted_data = weighted_data.transpose(*[d for d in valid_data.dims])
 
     eofs, pcs, ev, evr = calc_eofs(
-        weighted_data.values, n_components=n_eofs, rowvar=False, **kwargs)
+        weighted_data.values, n_components=n_eofs, rowvar=False,
+        random_state=random_state, **kwargs)
 
     eofs_dims = ([EOF_DIM_NAME] +
                  [d for d in valid_data.dims if d != time_field])
