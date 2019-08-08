@@ -144,7 +144,7 @@ def calculate_seasonal_eofs(anom_data, season='JJA',
         random_state=random_state, **kwargs)
 
     if rotate:
-        eofs, pcs, ev, evr = varimax_rotation(eofs, pcs, ev=ev, evr=evr)
+        eofs, pcs, ev, evr, _ = varimax_rotation(eofs, pcs, ev=ev, evr=evr)
 
     eofs_dims = ([EOF_DIM_NAME] +
                  [d for d in valid_data.dims if d != time_field])

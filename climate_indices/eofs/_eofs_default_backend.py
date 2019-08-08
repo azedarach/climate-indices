@@ -641,15 +641,15 @@ def _varimax_rotation_2d(eofs_2d, pcs_2d, ev=None,
     if kaiser_normalize:
         reofs *= normalization
 
-    rpcs, reofs = _fix_sign_convention(rpcs, reofs)
+    rpcs, reofs = _fix_sign_convention(rpcs, reofs, rowvar=rowvar)
 
     rev = np.sum(reofs ** 2, axis=1)
 
     if reorder_eofs:
-        rpcs, reofs, rev = _reorder_eofs(rpcs, reofs, rev)
+        rpcs, reofs, rev = _reorder_eofs(rpcs, reofs, rev, rowvar=rowvar)
 
     if unit_normalize:
-        rpcs, reofs = _unit_normalize_eofs(rpcs, reofs)
+        rpcs, reofs = _unit_normalize_eofs(rpcs, reofs, rowvar=rowvar)
 
     if ev is not None and evr is not None:
         total_variance = ev[0] / evr[0]
