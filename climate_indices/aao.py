@@ -95,11 +95,11 @@ def calculate_monthly_region_anomalies(hgt_data, climatology=None,
     return anom, climatology
 
 
-def calculate_annual_eof(anom_data, aao_mode=DEFAULT_AAO_MODE,
-                         time_field=DEFAULT_TIME_FIELD,
-                         lat_weights='scos', lat_field=DEFAULT_LAT_FIELD,
-                         hgt_field=DEFAULT_HGT_FIELD,
-                         n_eofs=N_EOFS, random_state=None, **kwargs):
+def calculate_annual_eofs(anom_data,
+                          time_field=DEFAULT_TIME_FIELD,
+                          lat_weights='scos', lat_field=DEFAULT_LAT_FIELD,
+                          hgt_field=DEFAULT_HGT_FIELD,
+                          n_eofs=N_EOFS, random_state=None, **kwargs):
     valid_data = anom_data.where(
         (anom_data[lat_field] >= MIN_LATITUDE) &
         (anom_data[lat_field] <= MAX_LATITUDE), drop=True)
@@ -113,29 +113,32 @@ def calculate_annual_eof(anom_data, aao_mode=DEFAULT_AAO_MODE,
     eofs, pcs, ev, evr = calc_eofs(
         weighted_data.values, n_components=n_eofs, rowvar=False, **kwargs)
 
-    eofs_data = eofs[aao_mode][np.newaxis, ...]
     eofs_dims = ([EOF_DIM_NAME] +
                  [d for d in valid_data.dims if d != time_field])
     eofs_coords = valid_data.coords.to_dataset().drop(
         time_field).reset_coords(drop=True)
     eofs_coords = eofs_coords.expand_dims(EOF_DIM_NAME, axis=0)
-    eofs_coords.coords[EOF_DIM_NAME] = (EOF_DIM_NAME, np.arange(1))
+    eofs_coords.coords[EOF_DIM_NAME] = (EOF_DIM_NAME, np.arange(n_eofs))
 
-    eofs_da = xr.DataArray(eofs_data, dims=eofs_dims,
+    eofs_da = xr.DataArray(eofs, dims=eofs_dims,
                            coords=eofs_coords.coords)
 
-    pcs_data = pcs[:, aao_mode][:, np.newaxis]
     pcs_dims = [time_field, EOF_DIM_NAME]
     pcs_coords = {time_field: valid_data[time_field].values,
-                  EOF_DIM_NAME: np.arange(1)}
-    pcs_da = xr.DataArray(pcs_data, dims=pcs_dims, coords=pcs_coords)
+                  EOF_DIM_NAME: np.arange(n_eofs)}
+    pcs_da = xr.DataArray(pcs, dims=pcs_dims, coords=pcs_coords)
 
-    ev = ev[aao_mode]
-    evr = evr[aao_mode]
+    ev_dims = [EOF_DIM_NAME]
+    ev_coords = {EOF_DIM_NAME: np.arange(n_eofs)}
+    ev_da = xr.DataArray(ev, dims=ev_dims, coords=ev_coords)
+
+    evr_dims = [EOF_DIM_NAME]
+    evr_coords = {EOF_DIM_NAME: np.arange(n_eofs)}
+    evr_da = xr.DataArray(evr, dims=evr_dims, coords=evr_coords)
 
     annual_eofs = {
-        'explained_variance': ev,
-        'explained_variance_ratio': evr,
+        'explained_variance': ev_da,
+        'explained_variance_ratio': evr_da,
         'eofs': eofs_da,
         'pcs': pcs_da}
 
@@ -156,14 +159,16 @@ def _fix_phase(eofs_data, time_field=DEFAULT_TIME_FIELD,
 
 
 def calculate_aao_pc_index(anom_data, eofs_data,
-                           ddof=0,
+                           aao_mode=DEFAULT_AAO_MODE, ddof=0,
                            lat_weights='scos',
                            time_field=DEFAULT_TIME_FIELD,
                            lat_field=DEFAULT_LAT_FIELD,
                            normalization=1):
-    n_eofs = eofs_data.shape[0]
+    n_eofs = 1
 
-    pos_phase_pattern = _fix_phase(eofs_data, time_field=time_field,
+    eof_data = eofs_data.sel({EOF_DIM_NAME: aao_mode}, drop=True)
+
+    pos_phase_pattern = _fix_phase(eof_data, time_field=time_field,
                                    lat_field=lat_field)
     pcs = _project_data(anom_data, pos_phase_pattern, lat_weights=lat_weights,
                         time_field=time_field, lat_field=lat_field)
@@ -180,5 +185,5 @@ def calculate_aao_pc_index(anom_data, eofs_data,
 
 __all__ = ['calculate_daily_region_anomalies',
            'calculate_monthly_region_anomalies',
-           'calculate_annual_eof',
+           'calculate_annual_eofs',
            'calculate_aao_pc_index']
