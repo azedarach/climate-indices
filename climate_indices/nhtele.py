@@ -108,9 +108,15 @@ def _project_data(X, eofs, lat_weights='scos',
     flat_data = np.reshape(weighted_data, (n_samples, n_features))
     flat_eofs = np.reshape(eofs.values, (n_eofs, n_features))
 
-    sol = np.dot(flat_data, flat_eofs.T)
+    valid_samples = np.all(np.isfinite(flat_data), axis=1)
+    valid_data = flat_data[valid_samples]
 
-    return sol
+    sol = np.dot(valid_data, flat_eofs.T)
+
+    projection = np.full((n_samples, n_eofs), np.NaN)
+    projection[valid_samples] = sol
+
+    return projection
 
 
 def calculate_seasonal_eofs(anom_data, season=DEFAULT_SEASON,

@@ -51,12 +51,18 @@ def _project_data(X, eofs, lat_weights='scos',
     flat_data = np.reshape(weighted_data, (n_samples, n_features))
     flat_eofs = np.reshape(eofs.values, (n_eofs, n_features))
 
+    valid_samples = np.all(np.isfinite(flat_data), axis=1)
+    valid_data = flat_data[valid_samples]
+
     a = np.dot(flat_eofs, flat_eofs.T)
-    b = np.dot(flat_eofs, flat_data.T)
+    b = np.dot(flat_eofs, valid_data.T)
 
     sol = np.linalg.lstsq(a, b, rcond=None)[0]
 
-    return sol.T
+    projection = np.full((n_samples, n_eofs), np.NaN)
+    projection[valid_samples] = sol.T
+
+    return projection
 
 
 def calculate_daily_region_anomalies(hgt_data, climatology=None,
