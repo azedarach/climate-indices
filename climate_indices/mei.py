@@ -187,7 +187,8 @@ def calculate_seasonal_eofs(anom_ds, time_field=DEFAULT_TIME_FIELD,
                             lon_field=DEFAULT_LON_FIELD,
                             variables=DEFAULT_VARIABLES,
                             lat_weights='scos',
-                            n_eofs=N_EOFS, random_state=None):
+                            n_eofs=N_EOFS, random_state=None,
+                            **kwargs):
     present_seasons = np.unique(anom_ds[time_field].dt.month.values)
     n_seasons = np.size(present_seasons)
 
@@ -207,29 +208,30 @@ def calculate_seasonal_eofs(anom_ds, time_field=DEFAULT_TIME_FIELD,
         pc_mask = anom_ds[time_field].dt.month == s
         season_ds = anom_ds.where(anom_ds[time_field].dt.month == s,
                                   drop=True)
-        combined_data = _get_combined_data(season_ds, variables,
-                                           time_field=time_field)
 
         weights = _get_lat_weights(lat_data, lat_weights=lat_weights)
-        weights_ds = season_ds.coords.to_dataset()
+        weighted_ds = season_ds.coords.to_dataset()
         for v in variables:
             var_data = season_ds[v]
-            var_weights = xr.broadcast(var_data, weights)[1]
-            weights_ds[v] = var_weights
+            weighted_ds[v] = weights * var_data
+            weighted_ds[v] = weighted_ds[v].transpose(
+                *[d for d in var_data.dims])
 
-        weights = _get_combined_data(weights_ds, variables)
+        weighted_data = _get_combined_data(weighted_ds, variables,
+                                           time_field=time_field)
 
-        season_eofs = calc_eofs(
-            combined_data, weights=weights, n_eofs=n_eofs,
-            random_state=random_state)
+        eofs, pcs, _, _ = calc_eofs(
+            weighted_data, n_components=n_eofs,
+            rowvar=False, random_state=random_state, **kwargs)
 
         var_eofs = _get_separated_data(
-            season_eofs['eofs'], season_ds, variables=variables)
+            eofs, season_ds, variables=variables,
+            time_field=time_field)
 
         for v in variables:
             eofs_results[v][i] = var_eofs[v]
 
-        pcs_values[pc_mask] = season_eofs['pcs']
+        pcs_values[pc_mask] = pcs
 
     var_data = {v: ([SEASON_DIM_NAME, EOF_DIM_NAME] + variable_dims[v],
                     eofs_results[v]) for v in variables}
@@ -260,6 +262,7 @@ def fix_phases(eofs_ds, pcs_da, time_field=DEFAULT_TIME_FIELD,
     for i, s in enumerate(present_seasons):
         season_eofs = eofs_ds.where(eofs_ds[SEASON_DIM_NAME] == s, drop=True)
         sst_eof = season_eofs[sst_field].isel({EOF_DIM_NAME: 0})
+        sst_eof = sst_eof.where((sst_eof[lon_field] >= 150), drop=True)
 
         max_sst = sst_eof.max()
         min_sst = sst_eof.min()
@@ -303,7 +306,8 @@ def _project_data(anom_ds, eofs_ds, lat_weights='scos',
         var_weights = xr.broadcast(var_data, weights)[1]
         weights_ds[v] = var_weights
 
-    weights = _get_combined_data(weights_ds, variables)
+    weights = _get_combined_data(weights_ds, variables,
+                                 time_field=time_field)
 
     weighted_data = combined_data * weights
 
