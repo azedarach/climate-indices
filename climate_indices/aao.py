@@ -101,6 +101,25 @@ def calculate_monthly_region_anomalies(hgt_data, climatology=None,
     return anom, climatology
 
 
+def _fix_phase(eofs_da, pcs_da, time_field=DEFAULT_TIME_FIELD,
+               lat_field=DEFAULT_LAT_FIELD):
+    n_eofs = eofs_da.sizes[EOF_DIM_NAME]
+
+    for i in range(n_eofs):
+        eof = eofs_da.sel({EOF_DIM_NAME: i}, drop=True)
+
+        lat_max = np.asscalar(eof.where(eof == eof.max(),
+                                        drop=True)[lat_field])
+        lat_min = np.asscalar(eof.where(eof == eof.min(),
+                                        drop=True)[lat_field])
+
+        if lat_max < lat_min:
+            eofs_da = xr.where(eofs_da[EOF_DIM_NAME] == i, -eofs_da, eofs_da)
+            pcs_da = xr.where(pcs_da[EOF_DIM_NAME] == i, -pcs_da, pcs_da)
+
+    return eofs_da, pcs_da
+
+
 def calculate_annual_eofs(anom_data,
                           time_field=DEFAULT_TIME_FIELD,
                           lat_weights='scos', lat_field=DEFAULT_LAT_FIELD,
@@ -135,6 +154,9 @@ def calculate_annual_eofs(anom_data,
                   EOF_DIM_NAME: np.arange(n_eofs)}
     pcs_da = xr.DataArray(pcs, dims=pcs_dims, coords=pcs_coords)
 
+    eofs_da, pcs_da = _fix_phase(eofs_da, pcs_da, time_field=time_field,
+                                 lat_field=lat_field)
+
     ev_dims = [EOF_DIM_NAME]
     ev_coords = {EOF_DIM_NAME: np.arange(n_eofs)}
     ev_da = xr.DataArray(ev, dims=ev_dims, coords=ev_coords)
@@ -152,19 +174,6 @@ def calculate_annual_eofs(anom_data,
     return annual_eofs
 
 
-def _fix_phase(eofs_data, time_field=DEFAULT_TIME_FIELD,
-               lat_field=DEFAULT_LAT_FIELD):
-    lat_max = np.asscalar(eofs_data.where(eofs_data == eofs_data.max(),
-                                          drop=True)[lat_field])
-    lat_min = np.asscalar(eofs_data.where(eofs_data == eofs_data.min(),
-                                          drop=True)[lat_field])
-
-    if lat_max < lat_min:
-        return -eofs_data
-    else:
-        return eofs_data
-
-
 def calculate_aao_pc_index(anom_data, eofs_data,
                            aao_mode=DEFAULT_AAO_MODE, ddof=0,
                            lat_weights='scos',
@@ -176,9 +185,7 @@ def calculate_aao_pc_index(anom_data, eofs_data,
     eof_data = eofs_data.where(eofs_data[EOF_DIM_NAME] == aao_mode,
                                drop=True)
 
-    pos_phase_pattern = _fix_phase(eof_data, time_field=time_field,
-                                   lat_field=lat_field)
-    pcs = _project_data(anom_data, pos_phase_pattern, lat_weights=lat_weights,
+    pcs = _project_data(anom_data, eof_data, lat_weights=lat_weights,
                         time_field=time_field, lat_field=lat_field)
 
     pcs_dims = [time_field, EOF_DIM_NAME]
