@@ -255,25 +255,34 @@ def calculate_seasonal_eofs(anom_ds, time_field=DEFAULT_TIME_FIELD,
 
 
 def fix_phases(eofs_ds, pcs_da, time_field=DEFAULT_TIME_FIELD,
-               lon_field=DEFAULT_LON_FIELD, variables=DEFAULT_VARIABLES,
+               lon_field=DEFAULT_LON_FIELD, lat_field=DEFAULT_LAT_FIELD,
+               variables=DEFAULT_VARIABLES,
                sst_field=DEFAULT_SST_FIELD):
     present_seasons = np.unique(pcs_da[time_field].dt.month.values)
 
     for i, s in enumerate(present_seasons):
         season_eofs = eofs_ds.where(eofs_ds[SEASON_DIM_NAME] == s, drop=True)
         sst_eof = season_eofs[sst_field].isel({EOF_DIM_NAME: 0})
-        sst_eof = sst_eof.where((sst_eof[lon_field] >= 150), drop=True)
 
-        max_sst = sst_eof.max()
-        min_sst = sst_eof.min()
+        min_lon = sst_eof[lon_field].min()
+        max_lon = sst_eof[lon_field].max()
 
-        max_coords = sst_eof.where(sst_eof == max_sst, drop=True)
-        min_coords = sst_eof.where(sst_eof == min_sst, drop=True)
+        if min_lon < 0 and max_lon <= 180:
+            sst_eof = sst_eof.where((sst_eof[lon_field] <= -120) &
+                                    (sst_eof[lon_field] >= -170) &
+                                    (sst_eof[lat_field] >= -5) &
+                                    (sst_eof[lat_field] <= 5), drop=True)
+        else:
+            sst_eof = sst_eof.where((sst_eof[lon_field] >= 190) &
+                                    (sst_eof[lon_field] <= 240) &
+                                    (sst_eof[lat_field] >= -5) &
+                                    (sst_eof[lat_field] <= 5), drop=True)
 
-        max_lon = float(max_coords[lon_field])
-        min_lon = float(min_coords[lon_field])
+        flipped_sst_eof = -sst_eof.copy()
+        nino34_max_anom = sst_eof.max()
+        flipped_nino34_max_anom = flipped_sst_eof.max()
 
-        if max_lon < min_lon:
+        if flipped_nino34_max_anom > nino34_max_anom:
             for v in variables:
                 eofs_ds[v] = xr.where(
                     eofs_ds.coords[SEASON_DIM_NAME] == s,
