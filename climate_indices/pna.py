@@ -6,6 +6,7 @@ from .eofs import calc_eofs, varimax_rotation
 
 DEFAULT_TIME_FIELD = 'time'
 DEFAULT_LAT_FIELD = 'lat'
+DEFAULT_LON_FIELD = 'lon'
 DEFAULT_HGT_FIELD = 'hgt'
 
 MIN_LATITUDE = 20.0
@@ -102,9 +103,42 @@ def calculate_monthly_region_anomalies(hgt_data, climatology=None,
     return anom, climatology
 
 
+def _fix_phase(eofs_da, pcs_da, lon_field=DEFAULT_LON_FIELD):
+    n_eofs = eofs_da.sizes[EOF_DIM_NAME]
+
+    max_lon = np.asscalar(eofs_da[lon_field].max())
+    min_lon = np.asscalar(eofs_da[lon_field].min())
+
+    if min_lon < 0 and max_lon <= 180:
+        offset_coords = True
+    else:
+        offset_coords = False
+
+    for i in range(n_eofs):
+        eof = eofs_da.sel({EOF_DIM_NAME: i}, drop=True)
+
+        lon_max = np.asscalar(eof.where(eof == eof.max(),
+                                        drop=True)[lon_field])
+        lon_min = np.asscalar(eof.where(eof == eof.min(),
+                                        drop=True)[lon_field])
+
+        if offset_coords:
+            if lon_max < 0:
+                lon_max = lon_max + 360
+            if lon_min < 0:
+                lon_min = lon_min + 360
+
+        if lon_max < lon_min:
+            eofs_da = xr.where(eofs_da[EOF_DIM_NAME] == i, -eofs_da, eofs_da)
+            pcs_da = xr.where(pcs_da[EOF_DIM_NAME] == i, -pcs_da, pcs_da)
+
+    return eofs_da, pcs_da
+
+
 def calculate_seasonal_eofs(anom_data, season='DJF',
                             rotate=True, time_field=DEFAULT_TIME_FIELD,
                             lat_weights='scos', lat_field=DEFAULT_LAT_FIELD,
+                            lon_field=DEFAULT_LON_FIELD,
                             hgt_field=DEFAULT_HGT_FIELD,
                             n_eofs=N_EOFS, random_state=None, **kwargs):
     """Calculate seasonal EOFs from geopotential height anomaly data.
@@ -166,6 +200,8 @@ def calculate_seasonal_eofs(anom_data, season='DJF',
     pcs_coords = {time_field: valid_data[time_field].values,
                   EOF_DIM_NAME: np.arange(n_eofs)}
     pcs_da = xr.DataArray(pcs, dims=pcs_dims, coords=pcs_coords)
+
+    eofs_da, pcs_da = _fix_phase(eofs_da, pcs_da, lon_field=lon_field)
 
     ev_dims = [EOF_DIM_NAME]
     ev_coords = {EOF_DIM_NAME: np.arange(n_eofs)}

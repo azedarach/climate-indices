@@ -101,8 +101,7 @@ def calculate_monthly_region_anomalies(hgt_data, climatology=None,
     return anom, climatology
 
 
-def _fix_phase(eofs_da, pcs_da, time_field=DEFAULT_TIME_FIELD,
-               lat_field=DEFAULT_LAT_FIELD):
+def _fix_phase(eofs_da, pcs_da, lat_field=DEFAULT_LAT_FIELD):
     n_eofs = eofs_da.sizes[EOF_DIM_NAME]
 
     for i in range(n_eofs):
@@ -185,8 +184,6 @@ def calculate_ao_pc_index(anom_data, eofs_data,
     eof_data = eofs_data.where(eofs_data[EOF_DIM_NAME] == ao_mode,
                                drop=True)
 
-#    pos_phase_pattern = _fix_phase(eof_data, time_field=time_field,
-#                                   lat_field=lat_field)
     pcs = _project_data(anom_data, eof_data, lat_weights=lat_weights,
                         time_field=time_field, lat_field=lat_field)
 
