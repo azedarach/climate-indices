@@ -153,7 +153,7 @@ def calculate_annual_eofs(anom_data,
                   EOF_DIM_NAME: np.arange(n_eofs)}
     pcs_da = xr.DataArray(pcs, dims=pcs_dims, coords=pcs_coords)
 
-    eofs_da, pcs_da = _fix_phase(eofs_da, pcs_da, time_field=time_field,
+    eofs_da, pcs_da = _fix_phase(eofs_da, pcs_da,
                                  lat_field=lat_field)
 
     ev_dims = [EOF_DIM_NAME]
