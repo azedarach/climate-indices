@@ -214,7 +214,7 @@ def _calc_eofs_default_svd(X, n_components=None, rowvar=True, center=True,
 
     u, s, vt = _calc_svd_default(valid_data, k=n_components)
 
-    variances = np.var(X, ddof=ddof, axis=rowvar)
+    variances = np.nanvar(X, ddof=ddof, axis=rowvar)
     ev = s ** 2 / fact
     evr = ev / variances.sum()
 
@@ -333,7 +333,7 @@ def _calc_eofs_default_cov(X, n_components=None, rowvar=True, center=True,
     w = np.flipud(w)[:n_components]
     v = np.fliplr(v)[:, :n_components]
 
-    variances = np.var(X, ddof=ddof, axis=int(bool(rowvar)))
+    variances = np.nanvar(X, ddof=ddof, axis=int(bool(rowvar)))
     ev = w[:n_components]
     evr = ev / variances.sum()
 
