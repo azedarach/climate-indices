@@ -81,6 +81,9 @@ def calculate_monthly_anomalies(ds, climatology=None,
 def get_seasonal_data(ds, time_field=DEFAULT_TIME_FIELD):
     monthly_ds = ds.resample({time_field: '1MS'}).mean(time_field)
 
+    # NB the date assigned to each sample corresponds to
+    # the first day of the second month of the season (for
+    # bimonthly seasons)
     seasonal_ds = monthly_ds.rolling(
         {time_field: MONTHS_PER_SEASON},
         center=True, min_periods=1).mean()
@@ -88,10 +91,8 @@ def get_seasonal_data(ds, time_field=DEFAULT_TIME_FIELD):
     return seasonal_ds
 
 
-def calculate_seasonal_anomalies(ds, climatology=None,
+def calculate_seasonal_anomalies(seasonal_ds, climatology=None,
                                  time_field=DEFAULT_TIME_FIELD,):
-    seasonal_ds = get_seasonal_data(ds, time_field=time_field)
-
     if climatology is None:
         climatology = seasonal_ds.groupby(
             seasonal_ds[time_field].dt.month).mean(time_field)
@@ -100,6 +101,32 @@ def calculate_seasonal_anomalies(ds, climatology=None,
         seasonal_ds[time_field].dt.month) - climatology
 
     return anom, climatology
+
+
+def standardize_seasonal_values(seasonal_ds,
+                                time_field=DEFAULT_TIME_FIELD,
+                                clim_start_year=None,
+                                clim_end_year=None,
+                                skipna=True, ddof=0):
+    if clim_start_year is None:
+        clim_start_year = int(seasonal_ds[time_field].dt.year.min())
+    if clim_end_year is None:
+        clim_end_year = int(seasonal_ds[time_field].dt.year.max())
+
+    ref_ds = seasonal_ds.where(
+        (seasonal_ds[time_field].dt.year >= clim_start_year) &
+        (seasonal_ds[time_field].dt.year <= clim_end_year),
+        drop=True)
+
+    means = ref_ds.groupby(ref_ds[time_field].dt.month).mean(
+        time_field, skipna=skipna)
+    stds = ref_ds.groupby(ref_ds[time_field].dt.month).std(
+        time_field, ddof=ddof, skipna=skipna)
+
+    return xr.apply_ufunc(
+        lambda x, m, s: (x - m) / s,
+        seasonal_ds.groupby(seasonal_ds[time_field].dt.month),
+        means, stds, dask='allowed')
 
 
 def standardize_values(ds, time_field=DEFAULT_TIME_FIELD,
@@ -334,20 +361,22 @@ def _project_data(anom_ds, eofs_ds, lat_weights='scos',
     return np.dot(valid_data, valid_eofs.T)
 
 
-def calculate_seasonal_mei(anom_ds, eofs_ds, ref_pcs_da,
+def calculate_seasonal_mei(seasonal_anom_ds, eofs_ds, ref_pcs_da,
                            time_field=DEFAULT_TIME_FIELD,
                            lat_field=DEFAULT_LAT_FIELD, lat_weights='scos',
                            variables=DEFAULT_VARIABLES):
-    present_seasons = np.unique(anom_ds[time_field].dt.month.values)
+    present_seasons = np.unique(seasonal_anom_ds[time_field].dt.month.values)
 
-    n_times = anom_ds.sizes[time_field]
+    n_times = seasonal_anom_ds.sizes[time_field]
 
     pcs_values = np.empty((n_times,))
 
-    seasons = anom_ds[time_field].dt.month
+    seasons = seasonal_anom_ds[time_field].dt.month
     for s in present_seasons:
         mask = seasons == s
-        season_ds = anom_ds.where(anom_ds[time_field].dt.month == s, drop=True)
+        season_ds = seasonal_anom_ds.where(
+            seasonal_anom_ds[time_field].dt.month == s, drop=True)
+
         season_eofs_ds = eofs_ds.where(eofs_ds[SEASON_DIM_NAME] == s,
                                        drop=True)
         season_ref_pcs = ref_pcs_da.where(ref_pcs_da[time_field].dt.month == s,
@@ -365,7 +394,7 @@ def calculate_seasonal_mei(anom_ds, eofs_ds, ref_pcs_da,
         pcs_values[mask] /= normalization
 
     pcs_dims = [time_field]
-    pcs_coords = {time_field: anom_ds[time_field].values}
+    pcs_coords = {time_field: seasonal_anom_ds[time_field].values}
     pcs_da = xr.DataArray(pcs_values, dims=pcs_dims, coords=pcs_coords)
 
     return pcs_da
@@ -442,4 +471,5 @@ __all__ = ['EOF_DIM_NAME', 'SEASON_DIM_NAME',
            'calculate_monthly_anomalies',
            'calculate_seasonal_anomalies',
            'get_season_name',
+           'standardize_seasonal_values',
            'standardize_values']
