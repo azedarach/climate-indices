@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.signal
 import warnings
 
 
@@ -460,6 +461,121 @@ def _calc_eofs_default(X, n_components=None, rowvar=True, method=None,
             normalize_pcs=normalize_pcs)
     elif method == 'cov':
         eofs_2d, pcs, ev, evr = _calc_eofs_default_cov(
+            data_2d, n_components=n_components, rowvar=rowvar,
+            center=center, bias=bias, ddof=ddof,
+            normalize_pcs=normalize_pcs)
+    else:
+        raise ValueError(
+            "invalid method parameter '%r'" % method)
+
+    eofs = _to_nd_array(eofs_2d, original_shape, rowvar=rowvar)
+
+    return eofs, pcs, ev, evr
+
+
+def _calc_heofs_default_svd(X, n_components=None, rowvar=True, center=True,
+                            bias=False, ddof=None, normalize_pcs=False):
+    _check_fixed_missing_values(X, rowvar=rowvar)
+
+    if ddof is None:
+        if bias:
+            ddof = 0
+        else:
+            ddof = 1
+
+    valid_data, valid_vars = _get_valid_variables(X, rowvar=rowvar)
+
+    rowvar = int(bool(rowvar))
+
+    if center:
+        valid_data = _center_data(valid_data, axis=rowvar)
+
+    n_features = X.shape[1 - rowvar]
+    n_valid_features = valid_data.shape[1 - rowvar]
+
+    n_samples = valid_data.shape[rowvar]
+    fact = n_samples * 1. - ddof
+
+    if n_components is None:
+        n_components = min(n_samples, n_valid_features)
+
+    complex_data = scipy.signal.hilbert(valid_data, axis=rowvar)
+
+    u, s, vt = np.linalg.svd(complex_data, full_matrices=False)
+
+    var_sum = np.sum(np.abs(s) ** 2)
+
+    u = u[:, :min(n_components, len(s))]
+    if n_components < len(s):
+        s = s[:n_components]
+    vt = vt[:min(n_components, len(s)), :]
+
+    ev = np.abs(s) ** 2 / fact
+    evr = ev / var_sum
+
+    if rowvar:
+        eofs = np.full((n_features, n_components), np.NaN, dtype=complex)
+        if normalize_pcs:
+            eofs[valid_vars] = np.dot(u, np.diag(s)) / np.sqrt(fact)
+            pcs = np.sqrt(fact) * vt
+        else:
+            eofs[valid_vars] = u
+            pcs = np.dot(np.diag(s), vt)
+    else:
+        eofs = np.full((n_components, n_features), np.NaN, dtype=complex)
+        if normalize_pcs:
+            eofs[:, valid_vars] = np.dot(np.diag(s) / np.sqrt(fact), vt)
+            pcs = np.sqrt(fact) * u
+        else:
+            eofs[:, valid_vars] = vt
+            pcs = np.dot(u, np.diag(s))
+
+    return eofs, pcs, ev, evr, s
+
+
+def _calc_heofs_default(X, n_components=None, rowvar=True, method=None,
+                        **kwargs):
+    if X.ndim < 2:
+        raise ValueError(
+            'Matrix with at least two dimensions expected '
+            '(got X.ndim = %d)' % X.ndim)
+
+    if rowvar:
+        original_shape = X.shape[:-1]
+    else:
+        original_shape = X.shape[1:]
+
+    data_2d = _to_2d_array(X, rowvar=rowvar)
+
+    if method is None:
+        if _has_fixed_missing_values(data_2d, rowvar=rowvar):
+            method = 'svd'
+        else:
+            raise NotImplementedError(
+                'HEOF analysis for non-fixed missing values not implemented')
+
+    if 'center' in kwargs:
+        center = kwargs['center']
+    else:
+        center = True
+
+    if 'bias' in kwargs:
+        bias = kwargs['bias']
+    else:
+        bias = False
+
+    if 'ddof' in kwargs:
+        ddof = kwargs['ddof']
+    else:
+        ddof = None
+
+    if 'normalize_pcs' in kwargs:
+        normalize_pcs = kwargs['normalize_pcs']
+    else:
+        normalize_pcs = False
+
+    if method == 'svd':
+        eofs_2d, pcs, ev, evr, _ = _calc_heofs_default_svd(
             data_2d, n_components=n_components, rowvar=rowvar,
             center=center, bias=bias, ddof=ddof,
             normalize_pcs=normalize_pcs)

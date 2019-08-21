@@ -1,5 +1,6 @@
 from ._eofs_dask_backend import _calc_eofs_dask
 from ._eofs_default_backend import (_calc_eofs_default,
+                                    _calc_heofs_default,
                                     _varimax_rotation_default)
 
 try:
@@ -21,6 +22,17 @@ def calc_eofs(X, backend=None, **kwargs):
                 "backend 'dask' cannot be used as "
                 "dask could not be imported")
         return _calc_eofs_dask(X, **kwargs)
+    else:
+        raise ValueError(
+            "invalid backend parameter '%r'" % backend)
+
+
+def calc_heofs(X, backend=None, **kwargs):
+    if backend is None:
+        backend = 'default'
+
+    if backend == 'default':
+        return _calc_heofs_default(X, **kwargs)
     else:
         raise ValueError(
             "invalid backend parameter '%r'" % backend)
