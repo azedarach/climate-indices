@@ -10,7 +10,7 @@ setup(
     author_email='Dylan.Harries@csiro.au',
     description='Helper utilities for calculating climate indices',
     long_description='',
-    install_requires=['dask', 'numpy', 'pytest', 'scipy', 'xarray'],
+    install_requires=['dask', 'geopandas', 'numpy', 'pytest', 'regionmask', 'scipy', 'xarray'],
     setup_requires=['pytest-runner', 'pytest-pylint'],
     tests_require=['pytest', 'pytest-cov', 'pylint'],
     packages=find_packages('src'),
